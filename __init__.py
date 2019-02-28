@@ -176,6 +176,38 @@ def listGames():
 	return json.dumps({'games':gamesList, 'status':'OK'})
 	
 
+@app.route("/getgame", methods=['POST'])
+def getGame():
+	cookie = request.cookies.get('_id')
+	
+	if cookie == None:
+		return json.dumps({'status':'ERROR'})
+
+	gameId = (request.get_json())['id']
+
+	client = MongoClient('localhost', 27017)
+	tttDB = client['ttt']
+	users = tttDB['users']
+	games = tttDB['games']
+
+	user = users.find_one({'_id':ObjectId(cookie)})
+	gamesArray = user['games']
+	found = False
+	print("GamesArray: " + str(gamesArray))
+	for game in gamesArray:
+		if str(game) == gameId:
+			found = True
+	
+	grid = []
+	winner = ''
+	if found:
+		gameRecord = games.find_one({'_id':ObjectId(gameId)})
+		grid = gameRecord['grid']
+		winner = gameRecord['winner']
+		return json.dumps({'status':'OK', 'grid':grid, 'winner':winner})
+	else:
+		return json.dumps({'status':'ERROR'})
+
 @app.route("/ttt/", methods=['GET', 'POST'])
 def ttt():
     try:
