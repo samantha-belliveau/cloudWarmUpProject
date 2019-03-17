@@ -1,4 +1,94 @@
 $(function() {
+	$("a").click(function(e) {
+	    if ($(e.target).attr("id") == "listGames"){
+            	$.ajax({
+                	type: "POST",
+                	url: '/listgames',
+                	success: function(response) {
+                    		console.log(response);
+                		window.location.href = "http://130.245.170.251/listGamesView?games=" + response;
+                	}
+            	});
+	    }
+	    if ($(e.target).attr("id") == "viewGameScore"){
+                $.ajax({
+                        type: "POST",
+                        url: '/getscore',
+                        success: function(response) {
+                                console.log(response);
+                                window.location.href = "http://130.245.170.251/gameScoreView?response=" + response;
+                        }
+                });
+	    }
+	    if ($(e.target).attr("id") == "home"){
+        	e.preventDefault();
+       		x = document.cookie;
+        	console.log(x);
+        	var playerMove = null;;
+        	var move = {'move':playerMove};
+        	var jsonMove = JSON.stringify(move);
+        	console.log(jsonMove);
+        	$.ajax({
+            		url: '/ttt/play',
+            		contentType: "application/json; charset=utf-8",
+            		data: jsonMove,
+            		type: 'POST',
+            		success: function(response) {
+                		console.log(response);
+                		grid = response.grid;
+                		console.log(grid);
+                		html = "<table><tr><td>";
+                		html = html + "<button type=\"submit\" class=\"" + grid[0] + "\" name=\"choice\" value=\"1\">" + grid[0] + "</button></td>";
+                		html = html + "<td><button type=\"submit\" class=\"" + grid[1] + "\" name=\"choice\" value=\"2\">" + grid[1] + "</button></td>";
+                		html = html + "<td><button type=\"submit\" class=\"" + grid[2] + "\" name=\"choice\" value=\"3\">" + grid[2] + "</button></td></tr>";
+                		html = html + "<tr><td><button type=\"submit\" class=\"" + grid[3] + "\" name=\"choice\" value=\"4\">" + grid[3] + "</button></td>";
+                		html = html + "<td><button type=\"submit\" class=\"" + grid[4] + "\" name=\"choice\" value=\"5\">" + grid[4] + "</button></td>";
+                		html = html + "<td><button type=\"submit\" class=\"" + grid[5] + "\" name=\"choice\" value=\"6\">" + grid[5] + "</button></td></tr>";
+                		html = html + "<tr><td><button type=\"submit\" class=\"" + grid[6] + "\" name=\"choice\" value=\"7\">" + grid[6] + "</button></td>";
+                		html = html + "<td><button type=\"submit\" class=\"" + grid[7] + "\" name=\"choice\" value=\"8\">" + grid[7] + "</button></td>";
+                		html = html + "<td><button type=\"submit\" class=\"" + grid[8] + "\" name=\"choice\" value=\"9\">" + grid[8] + "</button></td></tr>";
+                		html = html + "</table>";
+                		console.log(html);
+                		nameDate = $(".tagline").text();
+                		newNameDate = "<h1 class=\"mb-5\"><span class=\"tagline\" style=\"font-size:90%\"><b>" + nameDate + "</b></h1>"
+                		console.log(newNameDate);
+                		$("#col-xl-9 mx-auto").html(newNameDate);
+                		$("#tictactoe").html(html);
+            		},
+            		error: function(error) {
+                		console.log("hello");
+                		console.log(error);
+            		},  
+            		dataType: "json"
+        	}); 
+	    }
+        });
+});
+
+
+$(function() {
+    $('.listGames').on('click', function(e) {
+        e.preventDefault();
+
+        var x = {'cookie' : document.cookie};
+        console.log(x);
+        $.ajax({
+            url: '/listgames',
+            contentType: "application/json; charset=utf-8",
+            type: 'POST',
+            success: function(response) {
+                console.log(response);
+            },
+            error: function(error) {
+                console.log("hello");
+                console.log(error);
+            },
+            dataType: "json"
+        });
+    });
+});
+
+$(function() {
     $('.viewCookie').on('submit', function(e) {
         e.preventDefault();
 	

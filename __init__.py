@@ -2,12 +2,14 @@ from flask import Flask, jsonify, render_template, make_response, request, json
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 import datetime
+import time
 import re
 import dns.resolver
 import socket
 import smtplib, ssl
 from email.mime.text import MIMEText
 from http import cookies
+import pika
 
 app = Flask(__name__)
 
@@ -15,6 +17,50 @@ name = ""
 date = datetime.datetime.today()
 dateStr = date.strftime("%Y-%m-%d")
 
+@app.route("/speak", methods=['GET', 'POST'])
+def speak():
+	request_json = request.get_json()
+	key = request_json['key']
+	msg = request_json['msg']
+
+	connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+	channel = connection.channel()
+
+	channel.exchange_declare(exchange='hw3')
+
+	channel.basic_publish(exchange='hw3', routing_key=key, body=msg)
+	connection.close()
+
+	return json.dumps({'status':'OK'})
+
+response = None
+@app.route("/listen", methods=['GET', 'POST'])
+def listen():
+	connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+	channel = connection.channel()
+
+	channel.exchange_declare(exchange='hw3')
+
+	result = channel.queue_declare()
+	queue_name = result.method.queue
+
+	request_json = request.get_json()
+	keys = request_json['keys']
+
+	for key in keys:
+		channel.queue_bind(exchange='hw3',queue=queue_name,routing_key=key)
+
+	while True:	
+		msg = channel.basic_get(queue=queue_name,no_ack=True)
+		if msg[2] != None:
+			toReturn = json.dumps({'msg':msg[2].decode()})
+			print(toReturn)
+			return toReturn
+
+def callback(ch, method, properties, body):
+	print(body)
+	
+	return json.dumps({'msg':str(body)})
 @app.route("/")
 def hello():
     try:
@@ -39,6 +85,43 @@ def renderLogin():
 def renderLoggedOut():
 	return render_template('loggedOut.html')
 
+@app.route("/listGamesView", methods=['POST', 'GET'])
+def renderListGames():
+	listGames = request.args.get('games')
+	return render_template('listGames.html', gamesList=listGames)
+
+@app.route("/gameScoreView", methods=["GET"])
+def renderGameScore():
+	score = request.args.get('response')
+	humanIndex = score.find("human")
+	nextComma = score.find(",", humanIndex)
+	human = ""
+	if nextComma != -1:
+		human = score[humanIndex+8:nextComma]
+	else:
+		human = score[humanIndex+8:]
+	
+	compIndex = score.find("wopr")
+	nextComma = score.find(",", compIndex)
+	comp = ""
+	if nextComma != -1:
+		comp = score[compIndex+7:nextComma]
+	else:
+		comp = score[compIndex+7:]
+
+	tieIndex = score.find("tie")
+	nextComma = score.find(",", tieIndex)
+	tie = ""
+	if nextComma != -1:
+		tie = score[tieIndex+6:nextComma]
+	else:
+		tie = score[tieIndex+6:]
+
+	
+
+	print(human)
+	return render_template('viewGameScores.html', comp=comp, tie=tie, human=human)
+
 @app.route("/adduser", methods=['POST'])
 def addUser():
 	request_json = request.get_json()
@@ -50,22 +133,22 @@ def addUser():
 	tttDB = client['ttt']
 	users = tttDB['users']
 	games = []
-	result = users.insert_one({"games":games, "currentGame": "null", "username": username, "password": password, "email": email, "verified": "false"})
+	result = users.insert_one({"reputation": 0, "games":games, "currentGame": "null", "username": username, "password": password, "email": email, "verified": "false"})
 	#result = users.insert_one({"username": "test", "password": "hello", "email": "e", "verified": "false"})
 
 	if result.acknowledged == True:
 		port = 587  # For starttls
 		smtp_server = "smtp.gmail.com"
 		sender_email = "cse356cloudproject@gmail.com"
-		receiver_email = "s.n.belliveau@gmail.com"
-		password = "Samiam5678!"
-		msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email: " + str(result.inserted_id))
+		receiver_email = email
+		password = "cse356cloud"
+		msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email\n validation key: <" + str(result.inserted_id) + ">")
 		msg['Subject'] = "Email Verification for TTT"
 		context = ssl.create_default_context()
 		s = smtplib.SMTP(smtp_server, port)
 		s.starttls(context=context)
 		s.login(sender_email, password)
-#		s.sendmail(sender_email, receiver_email, msg.as_string())
+		s.sendmail(sender_email, receiver_email, msg.as_string())
 		return json.dumps({'status': 'OK'})
 	return json.dumps({'status': 'ERROR'})
 
@@ -99,9 +182,9 @@ def verifyUser():
 		if found:
 			users.update_one({'_id':ObjectId(key)}, {'$set':{'verified':'true'}})
 			return json.dumps({'status':'OK'})
-		return json.dumps({'status':'ERROR'})
+		return json.dumps({'status':'ERROR', 'error':'Invalid email or validation key'})
 	except:
-		return json.dumps({'status':'ERROR'})
+		return json.dumps({'status':'ERROR', 'error':'Invalid email or validation key'})
 
 @app.route("/login", methods=['POST'])
 def login():
@@ -138,8 +221,64 @@ def logout():
 	print("user " + str(currentCookie) + "logged out") 
 	return response
 
+def getUser(Id):
+	client = MongoClient('localhost', 27017)
+	tttDB = client['ttt']
+	users = tttDB['users']
+
+	user = users.find_one({'_id': ObjectId(Id)})
+	return {'id':Id, 'username':user['username'], 'reputation':user['reputation']}
+
+@app.route("/questions/<questionId>", methods=['GET'])
+def getQuestion(questionId):
+	
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	questionsCollection = questionsDB['questions']
+
+	print(questionId)
+
+	query = {'_id': ObjectId(questionId)}
+	question = questionsCollection.find_one(query)
+
+	if question == None:
+		return json.dumps({'status':'error', 'error':'Invalid question id'})
+	
+	user = getUser(question['userID'])
+
+	print(user)
+
+	questionJson = {'id':questionId, 'user':user, 'body':question['body'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']} 
+	return json.dumps({'status':'OK', 'question':questionJson})
+
+@app.route("/questions/<questionId>/answers", methods=['GET'])
+def getAnswers(questionId):
+	print(questionId)
+
+	return json.dumps({"status":"OK"})
 
 
+@app.route("/questions/add", methods=['POST'])
+def addQuestion():
+	currentCookie = request.cookies.get('_id')
+	if currentCookie == '':
+		return json.dumps({'status':'error', 'error':'User is not logged in'})
+	
+
+	request_json = request.get_json()
+	title = request_json['title']
+	body = request_json['body']
+	tagsArray = request_json['tags']
+	
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	questionsCollection = questionsDB['questions']
+
+	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':time.time(), 'media': "", 'accepted_answer_id':None})
+	if result.acknowledged == True:
+		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
+	else:
+		return json.dumps({'status':'error', 'error':'Failed to add question'})
 
 @app.route("/cookieTest", methods=['POST'])
 def testCookie():
@@ -207,7 +346,42 @@ def getGame():
 		return json.dumps({'status':'OK', 'grid':grid, 'winner':winner})
 	else:
 		return json.dumps({'status':'ERROR'})
+@app.route('/getscore', methods=['GET', 'POST'])
+def getScore():
+	cookie = request.cookies.get('_id')
 
+	if cookie == None:
+		return json.dumps({'status':'ERROR'})
+	
+	client = MongoClient('localhost', 27017)
+	tttDB = client['ttt']
+	users = tttDB['users']
+	gamesCol = tttDB['games']
+
+	query = {'_id':ObjectId(cookie)}
+	result = users.find(query)
+
+	games = []
+	gamesList = []
+	for x in result:
+		games = x['games']
+
+	humanWins = 0
+	compWins = 0
+	ties = 0
+	for game in games:
+		gameId = game
+		gameRecord = gamesCol.find_one({'_id':ObjectId(gameId)})
+		winner = gameRecord['winner']
+		if (winner == 'X'):
+			humanWins = humanWins + 1
+		if (winner == 'O'):
+			compWins = compWins + 1
+		if (winner == ' '):
+			ties = ties + 1
+	
+	return json.dumps({'human':humanWins, 'wopr':compWins, 'tie':ties, 'status':'OK'})
+	
 @app.route("/ttt/", methods=['GET', 'POST'])
 def ttt():
     try:
@@ -221,7 +395,9 @@ def ttt():
 @app.route("/ttt/play", methods=['GET', 'POST'])
 def play():
 	request_json = request.get_json()
-	move = request_json['move']
+	move = None
+	if request_json != None:
+		move = request_json['move']
 	
 	cookie = request.cookies.get('_id')	
 	print("user id: " + str(cookie))
