@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, make_response, request, json
 from pymongo import MongoClient
+import pymongo
 from bson.objectid import ObjectId
 import datetime
 import time
@@ -248,14 +249,101 @@ def getQuestion(questionId):
 
 	print(user)
 
-	questionJson = {'id':questionId, 'user':user, 'body':question['body'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']} 
+	questionJson = {'id':questionId, 'user':user, 'body':question['body'], 'title':question['title'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']} 
 	return json.dumps({'status':'OK', 'question':questionJson})
 
 @app.route("/questions/<questionId>/answers", methods=['GET'])
 def getAnswers(questionId):
-	print(questionId)
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	answersCollection = questionsDB['answers']
 
-	return json.dumps({"status":"OK"})
+	query = {'questionID':questionId}
+	results = answersCollection.find(query)
+	answersArray = []
+	if results == None:
+		return json.dumps({'status':'error', 'error':'Invalid question id, or question has no answers'})
+	else:
+		for answer in results:
+			currentAnswer = {'user':answer['user'], 'body':answer['body'], 'score':answer['score'], 'is_accepted':answer['is_accepted'], 'timestamp':answer['timestamp'], 'media':answer['media']}
+			answersArray.append(currentAnswer)
+		return json.dumps({'status':'OK', 'answers':answersArray})
+
+@app.route("/search", methods=['POST'])
+def search():
+	request_json = request.get_json()
+	timestamp = time.time()
+	limit = 25
+	accepted = False
+	try:
+		timestamp = request_json['timestamp']
+	except KeyError:
+		print("Setting timestamp to default = current time")
+	try:
+		limit = request_json['limit']
+		if limit > 100:
+			return json.dumps({'status':'error', 'error':'Cannot have limit higher than 100'})
+	except KeyError:
+		print("Setting limit to default = 25")
+	try:
+		accepted = request_json['accepted']
+	except KeyError:
+		print("Setting accepted to default = false")
+
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	questionsCollection = questionsDB['questions']
+
+	query = {'timestamp':{'$lte': timestamp}}
+	if accepted:
+		query = {'timestamp':{'$lte': timestamp}, 'accepted_answer_id':{'$ne':None}}
+
+	results = questionsCollection.find(query).sort("timestamp", pymongo.DESCENDING)
+	questionsArray = []
+	count = 0
+	for question in results:
+		if count >= limit:
+			break
+		user = getUser(question['userID'])
+		questionJson = {'id':str(question['_id']), 'title':question['title'], 'user':user, 'body':question['body'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']}
+		questionsArray.append(questionJson)
+
+	return json.dumps({'status':'OK', 'questions':questionsArray})
+
+
+@app.route("/questions/<questionId>/answers/add", methods=['POST'])
+def addAnswer(questionId):
+	currentCookie = request.cookies.get('_id')
+	if currentCookie == '':
+		return json.dumps({'status':'error', 'error':'User is not logged in'})
+
+	request_json = request.get_json()
+	body = request_json['body']
+	try:	
+		media = request_json['media']
+	except KeyError:
+		media = ""
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	questionsCollection = questionsDB['questions']
+	answersCollection = questionsDB['answers']
+
+	query = {'_id': ObjectId(questionId)}
+	question = questionsCollection.find_one(query)
+
+	if question == None:
+		return json.dumps({'status':'error', 'error':'Invalid quetion id'})
+
+	username = (getUser(question['userID']))['username']
+	score = 0
+	is_accepted = False
+	timestamp = time.time()
+
+	result = answersCollection.insert_one({'questionID': str(question['_id']), 'user':username, 'body':body, 'score':score, 'is_accepted':is_accepted, 'timestamp':timestamp, 'media':media})
+	if result.acknowledged == True:
+		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
+	else:
+		return json.dumps({'status':'error', 'error':'Failed to add answer'})
 
 
 @app.route("/questions/add", methods=['POST'])
