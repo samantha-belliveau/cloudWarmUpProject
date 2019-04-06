@@ -65,6 +65,179 @@ $(function() {
         });
 });
 
+$(function() {
+    $('.addQuestionForm').on('submit', function(e) {
+        e.preventDefault();
+	console.log("in add question function");
+        var form = document.getElementById("addQuestionForm");
+        var title = form.elements['title'].value;
+        var body = form.elements['body'].value;
+        var tags = form.elements['tags'].value;
+	var media = form.elements['media'].value;
+	
+	var tagsArray = tags.split(",");
+
+        var json = {'title':title, 'body':body,'tags':tagsArray}
+	var jsonData = JSON.stringify(json);
+	console.log(jsonData);
+	$.ajax({
+            url: '/questions/add',
+            contentType: "application/json; charset=utf-8",
+            type: 'POST',
+            data: jsonData,
+	    success: function(response) {
+		document.getElementById('results').innerHTML = '';
+		var h1 = document.createElement('h1');
+		status = response['status'];
+		if (status == "OK"){
+			qID = response['id'];
+			h1.innerHTML = "Question Add Successful<p>Question ID: " + qID + "</p>";
+		}
+		else{
+			h1.innerHTML = "Question Add Failed, " + response['error'];
+		}
+		document.getElementById('results').appendChild(h1)
+                console.log(response);
+            },
+            error: function(error) {
+                console.log(error);
+            },
+            dataType: "json"
+        });
+    });
+});
+
+$(function() {
+    $('.addAnswerForm').on('submit', function(e) {
+        e.preventDefault();
+        var form = document.getElementById("addAnswerForm");
+	var questionID = form.elements['questionID'].value;
+	var body = form.elements['body'].value;
+
+	var json = {'body':body};
+	var jsonData = JSON.stringify(json);
+	var urlString = "/questions/" + questionID + "/answers/add"
+        console.log(urlString);
+	$.ajax({
+            url: urlString,
+            contentType: "application/json; charset=utf-8",
+            type: 'POST',
+            data: jsonData,
+            success: function(response) {
+                document.getElementById('results').innerHTML = '';
+                var h1 = document.createElement('h1');
+                status = response['status'];
+                if (status == "OK"){
+                        qID = response['id'];
+                        h1.innerHTML = "Answer Add Successful<p> ID: " + qID + "</p>";
+                }
+                else{
+                        h1.innerHTML = "Question Add Failed, " + response['error'];
+                }
+                document.getElementById('results').appendChild(h1)
+                console.log(response);
+            },
+            error: function(error) {
+                console.log(error);
+            },
+            dataType: "json"
+        });
+    });
+});
+$(function() {
+    $('.searchQuestionIDForm').on('submit', function(e) {
+        e.preventDefault();
+        var form = document.getElementById("searchQuestionIDForm");
+        var questionID = form.elements['questionID'].value;
+
+	var urlString = "/questions/" + questionID;
+        console.log(urlString);
+        $.ajax({
+            url: urlString,
+            contentType: "application/json; charset=utf-8",
+            type: 'GET',
+            success: function(response) {
+                document.getElementById('results').innerHTML = '';
+                var h1 = document.createElement('h1');
+                status = response['status'];
+                if (status == "OK"){
+                        question = response['question']
+                        h1.innerHTML = "Details of Question " + questionID + "<hr>";
+                        h2 = document.createElement('h2');
+                        id = question['id'];
+                        user = question['user'];
+			username = user['username'];
+			userRep = user['reputation'];
+                        title = question['title'];
+                        score = question['score'];
+                	view_count = question['view_count'];
+			answer_count = question['answer_count'];
+			timestamp = question['timestamp'];
+			body = question['body'];
+			accepted_answer_id = question['accepted_answer_id'];        
+		        h2.innerHTML += "id: " + id + "<p>Username of poster: " + username + "</p><p>Reputation of poster: " + userRep + "</p><p>Title: " + title + "</p><p>Body: " + body + "</p><p>timestamp: " + timestamp + "</p><p>score: " + score + "</p><p>View Count: " + view_count + "</p><p>Answer Count: " + answer_count + "</p><p>Accepted Answer ID: " + accepted_answer_id + "</p><hr>";
+                        h1.appendChild(h2);
+                }
+                else{
+                        h1.innerHTML = "Question Add Failed, " + response['error'];
+                }
+                document.getElementById('results').appendChild(h1)
+                console.log(response);
+            },
+            error: function(error) {
+                console.log(error);
+            },
+            dataType: "json"
+        });
+    });
+});
+$(function() {
+    $('.searchAnswerForm').on('submit', function(e) {
+        e.preventDefault();
+        var form = document.getElementById("searchAnswerForm");
+        var questionID = form.elements['questionID'].value;
+
+        var urlString = "/questions/" + questionID + "/answers"
+        console.log(urlString);
+        $.ajax({
+            url: urlString,
+            contentType: "application/json; charset=utf-8",
+            type: 'GET',
+            success: function(response) {
+                document.getElementById('results').innerHTML = '';
+                var h1 = document.createElement('h1');
+                status = response['status'];
+                if (status == "OK"){
+			answers = response['answers']
+			h1.innerHTML = "Answers to question " + questionID + "<hr>";
+			h2 = document.createElement('h2');
+			for (var i = 0; i < answers.length; i++){
+				var answer = answers[i];
+				console.log(answer.id);
+				id = answer.id;
+				user = answer['user'];
+				body = answer['body'];
+				score = answer['score'];
+				is_accepted = answer['is_accepted'];
+				timestamp = answer['timestamp'];
+				h2.innerHTML += "id: " + id + "<p>user: " + user + "</p><p>body: " + body + "</p><p>score: " + score + "</p><p>accepted: " + is_accepted + "</p><p>timestamp: " + timestamp + "</p><hr>";
+			}
+			h1.appendChild(h2);
+                }
+                else{
+                        h1.innerHTML = "Question Add Failed, " + response['error'];
+                }
+                document.getElementById('results').appendChild(h1)
+                console.log(response);
+            },
+            error: function(error) {
+                console.log(error);
+            },
+            dataType: "json"
+        });
+    });
+});
+
 
 $(function() {
     $('.listGames').on('click', function(e) {

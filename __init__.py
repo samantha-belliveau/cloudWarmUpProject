@@ -1,4 +1,4 @@
-from flask import Flask, jsonify, render_template, make_response, request, json
+from flask import Flask, jsonify, render_template, Response, make_response, request, json
 from pymongo import MongoClient
 import pymongo
 from bson.objectid import ObjectId
@@ -11,12 +11,28 @@ import smtplib, ssl
 from email.mime.text import MIMEText
 from http import cookies
 import pika
+from cassandra.cluster import Cluster
+from cassandra.auth import PlainTextAuthProvider
+from cassandra.cluster import SimpleStatement
 
 app = Flask(__name__)
 
 name = ""
 date = datetime.datetime.today()
 dateStr = date.strftime("%Y-%m-%d")
+
+@app.route("/deposit", methods=['POST'])
+def deposit():
+	filename = request.form['filename']
+	contents = request.form['contents']
+
+	cluster = Cluster(contact_points = ['192.168.122.10'])
+	session = cluster.connect('hw5')
+	strCQL = "INSERT INTO imgs (filename,contents) VALUES (?,?)"
+	pStatement = session.prepare(strCQL)
+	session.execute(pStatement,[fileName,contents])
+
+	return json.dumps({'status':'OK'})
 
 @app.route("/speak", methods=['GET', 'POST'])
 def speak():
@@ -69,6 +85,26 @@ def hello():
         return render_template('ttt.html', name=name, date=dateStr)
     except:
         return render_template('ttt.html', name="")
+
+@app.route("/renderAddQ")
+def renderAddQ():
+	currentCookie = request.cookies.get('_id')
+	if isLoggedIn(currentCookie) == False:
+		render_template('addQuestion.html', loggedIn='false')
+	return render_template('addQuestion.html', loggedIn='true')
+
+@app.route("/renderAddA")
+def renderAddA():
+	return render_template('addAnswer.html')
+
+@app.route("/renderSearchQ")
+def renderSearchQ():
+	return render_template('searchQuestion.html')
+
+@app.route("/renderSearchA")
+def renderSearchA():
+	return render_template('searchAnswer.html')
+
 
 @app.route("/signUp")
 def renderSignUp():
@@ -222,6 +258,63 @@ def logout():
 	print("user " + str(currentCookie) + "logged out") 
 	return response
 
+@app.route("/user/<username>", methods=["GET"])
+def getUserInfo(username):
+	user = getUserByName(username)
+
+	if user == None:
+		return json.dumps({'status':'error', 'error':'No user with given username exists'})
+	
+	userInfo = {'email':user['email'], 'reputation':user['reputation']}
+	return json.dumps({'status':'OK', 'user':userInfo})
+
+@app.route("/user/<username>/questions", methods=["GET"])
+def getUsersQuestions(username):
+	user = getUserByName(username)
+
+	if user == None:
+		return json.dumps({'status':'error', 'error':'No user with given username exists'})	
+
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	questionsCollection = questionsDB['questions']
+
+	query = {'userID':str(user['_id'])}
+	questions = questionsCollection.find(query)
+
+	questionIDs = []
+	for question in questions:
+		questionIDs += [str(question['_id'])]
+	return json.dumps({'status':'OK', 'questions':questionIDs})
+
+@app.route("/user/<username>/answers", methods=["GET"])
+def getUsersAnswers(username):
+	user = getUserByName(username)
+
+	if user == None:
+		return json.dumps({'status':'error', 'error':'No user with given username exists'})
+	
+	client = MongoClient('mongodb://192.168.122.8:27017/')
+	questionsDB = client['questionsDB']
+	answersCollection = questionsDB['answers']
+
+	query = {'user':username}
+	answers = answersCollection.find(query)
+
+	answersIDs = []
+	for answer in answers:
+		answersIDs += [str(answer['_id'])]
+	return json.dumps({'status':'OK', 'answers':answersIDs})
+
+
+def getUserByName(username):
+	client = MongoClient('localhost', 27017)
+	userDB = client['ttt']
+	users = userDB['users']
+
+	user = users.find_one({'username':username})
+	return user
+
 def getUser(Id):
 	client = MongoClient('localhost', 27017)
 	tttDB = client['ttt']
@@ -230,48 +323,71 @@ def getUser(Id):
 	user = users.find_one({'_id': ObjectId(Id)})
 	return {'id':Id, 'username':user['username'], 'reputation':user['reputation']}
 
-@app.route("/questions/<questionId>", methods=['GET'])
+@app.route("/questions/<questionId>", methods=['GET', 'DELETE'])
 def getQuestion(questionId):
 	
-	client = MongoClient('mongodb://192.168.122.8:27017/')
-	questionsDB = client['questionsDB']
-	questionsCollection = questionsDB['questions']
-	viewersCollection = questionsDB['questionViewers']
+	if request.method == "GET":
+		client = MongoClient('mongodb://192.168.122.8:27017/')
+		questionsDB = client['questionsDB']
+		questionsCollection = questionsDB['questions']
+		viewersCollection = questionsDB['questionViewers']
 
-	print("viewing:")
-	print(questionId)
+		print("viewing:")
+		print(questionId)
 
-	query = {'_id': ObjectId(questionId)}
-	question = questionsCollection.find_one(query)
+		query = {'_id': ObjectId(questionId)}
+		question = questionsCollection.find_one(query)
 
-	if question == None:
-		return json.dumps({'status':'error', 'error':'Invalid question id'})
+		if question == None:
+			return json.dumps({'status':'error', 'error':'Invalid question id'})
 
-	currentCookie = request.cookies.get('_id')
-	newViewCount = question['view_count']
-	if isLoggedIn(currentCookie) == False:	
-		# get IP
-		IP = request.remote_addr
-		query = {'IP':IP, 'questionID':questionId}
-		result = viewersCollection.find_one(query)
-		if result == None:
-			newViewCount = newViewCount + 1
-			questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
-			viewersCollection.insert_one({'IP':IP, 'questionID':questionId})
-	else:
-		query = {'userID':currentCookie, 'questionID':questionId}
-		result = viewersCollection.find_one(query)
-		if result == None:
-			newViewCount = newViewCount + 1
-			questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
-			viewersCollection.insert_one({'userID':currentCookie, 'questionID':questionId})
+		currentCookie = request.cookies.get('_id')
+		newViewCount = question['view_count']
+		if isLoggedIn(currentCookie) == False:	
+			# get IP
+			IP = request.remote_addr
+			query = {'IP':IP, 'questionID':questionId}
+			result = viewersCollection.find_one(query)
+			if result == None:
+				newViewCount = newViewCount + 1
+				questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
+				viewersCollection.insert_one({'IP':IP, 'questionID':questionId})
+		else:
+			query = {'userID':currentCookie, 'questionID':questionId}
+			result = viewersCollection.find_one(query)
+			if result == None:
+				newViewCount = newViewCount + 1
+				questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
+				viewersCollection.insert_one({'userID':currentCookie, 'questionID':questionId})
 	
-	user = getUser(question['userID'])
+		user = getUser(question['userID'])
 
-	print(user)
+		print(user)
 
-	questionJson = {'id':questionId, 'user':user, 'body':question['body'], 'title':question['title'], 'score':question['score'], 'view_count':newViewCount, 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']} 
-	return json.dumps({'status':'OK', 'question':questionJson})
+		questionJson = {'id':questionId, 'user':user, 'body':question['body'], 'title':question['title'], 'score':question['score'], 'view_count':newViewCount, 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']} 
+		return json.dumps({'status':'OK', 'question':questionJson})
+	else:
+		currentCookie = request.cookies.get('_id')
+		if isLoggedIn(currentCookie) == False:
+			return Response(status=405)
+		else:
+			client = MongoClient('mongodb://192.168.122.8:27017/')
+			questionsDB = client['questionsDB']
+			questionsCollection = questionsDB['questions']
+			viewersCollection = questionsDB['questionViewers']
+			
+			query = {'_id': ObjectId(questionId)}
+			question = questionsCollection.find_one(query)
+			
+			if question == None:
+				return Response(status=405)
+			
+			qPosterID = question['userID']
+			if qPosterID != currentCookie:
+				return Response(status=405)
+			
+			questionsCollection.delete_one(query)
+			return Response(status=200)
 
 @app.route("/questions/<questionId>/answers", methods=['GET'])
 def getAnswers(questionId):
@@ -300,6 +416,7 @@ def search():
 	timestamp = int(time.time())
 	limit = 25
 	accepted = False
+	searchPhrase = ""
 	try:
 		timestamp = request_json['timestamp']
 		print("Setting timestamp to %d", timestamp)
@@ -318,13 +435,49 @@ def search():
 	except KeyError:
 		print("Setting accepted to default = false")
 
+
+	try:
+		searchPhrase = request_json['q']
+		searchWords = searchPhrase.split(" ")
+		
+		searchClient = MongoClient('mongodb://192.168.122.12:27017/')
+		searchDB = searchClient['questionsIndex']
+		searchCollection = searchDB['questionsIndex']
+		
+		qContainsWord = []
+		start = True
+		for word in searchWords:
+			query = {'word':word}
+			qsWithWord = searchCollection.find_one(query)
+			if qsWithWord == None:
+				json.dumps({'status':'OK', 'questions':[]})
+			qIDs = qsWithWord['ids']
+			if start:
+				qContainsWord = qIDs
+				start = False
+			else:
+				print("contains ", word)
+				for qID in qContainsWord:
+					if not (qID in qIDs):
+						print(qContainsWord)
+						qContainsWord.remove(qID)
+						print(qContainsWord)
+		objectIDArray = []
+		for ID in qContainsWord:
+			objectIDArray.append(ObjectId(ID))
+		print(objectIDArray)
+	except KeyError:
+		objectIDArray = []
+
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
 
 	query = {'timestamp':{'$lte': timestamp}}
+	if len(objectIDArray) > 0:
+		query['_id'] = {'$in':objectIDArray}
 	if accepted:
-		query = {'timestamp':{'$lte': timestamp}, 'accepted_answer_id':{'$ne':None}}
+		query['accepted_answer_id'] = {'$ne':None}
 
 	results = questionsCollection.find(query).sort("timestamp", pymongo.DESCENDING)
 	questionsArray = []
@@ -332,10 +485,11 @@ def search():
 	for question in results:
 		if count >= limit:
 			break
-		user = getUser(question['userID'])
-		questionJson = {'id':str(question['_id']), 'title':question['title'], 'user':user, 'body':question['body'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']}
-		questionsArray.append(questionJson)
-		count = count + 1
+		if searchPhrase in question['title'] or searchPhrase in question['body']:
+			user = getUser(question['userID'])
+			questionJson = {'id':str(question['_id']), 'title':question['title'], 'user':user, 'body':question['body'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']}
+			questionsArray.append(questionJson)
+			count = count + 1
 
 	print("Returning the following:")
 	print(questionsArray)
@@ -397,6 +551,7 @@ def isLoggedIn(currentId):
 
 @app.route("/questions/add", methods=['POST'])
 def addQuestion():
+	print("in question method")
 	currentCookie = request.cookies.get('_id')
 	print(currentCookie)
 
@@ -420,11 +575,26 @@ def addQuestion():
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
 
+
 	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
 	if result.acknowledged == True:
+		indexQuestion(str(result.inserted_id), title, body)
 		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
 	else:
 		return json.dumps({'status':'error', 'error':'Failed to add question'})
+
+def indexQuestion(questionID, title, body):
+	client = MongoClient('mongodb://192.168.122.12:27017/')
+	searchIndexDB = client['questionsIndex']
+	searchIndexCollection = searchIndexDB['questionsIndex']
+
+	titleWords = title.split(" ")
+	bodyWords = body.split(" ")
+	print('here')
+	contents = titleWords + bodyWords
+	for word in contents:
+		print(word)
+		searchIndexCollection.update_one({"word":word}, {'$addToSet': {"ids":questionID}}, upsert=True)
 
 @app.route("/cookieTest", methods=['POST'])
 def testCookie():
