@@ -86,6 +86,10 @@ def hello():
     except:
         return render_template('ttt.html', name="")
 
+@app.route("/renderSearchU")
+def renderSearchU():
+	return render_template('searchUser.html')
+
 @app.route("/renderAddQ")
 def renderAddQ():
 	currentCookie = request.cookies.get('_id')

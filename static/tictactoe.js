@@ -66,6 +66,64 @@ $(function() {
 });
 
 $(function() {
+    $('.searchUserForm').on('submit', function(e) {
+	e.preventDefault();
+	
+	var form = document.getElementById("searchUserForm");
+	var username = form.elements['username'].value;
+	var searchType = $("#searchType").val();
+	console.log(searchType);
+
+	var urlPath = "/user/" + username;
+	if (searchType != "userInfo"){
+		urlPath += "/" + searchType
+	}
+	console.log(urlPath);
+	$.ajax({
+		url: urlPath,
+		type: 'GET',
+		success: function(response) {
+			console.log(response);
+			status = response['status'];
+			console.log(status);
+	                document.getElementById('results').innerHTML = '';
+			var h1 = document.createElement('h1');
+			var h2 = document.createElement('h2');
+			if (status != "OK"){
+				h1.innerHTML = "Search failed: " + response['error'];
+			}
+			else if (searchType == "userInfo"){
+				h1.innerHTML = "User info for user " + username; 
+				h2.innerHTML = "Email: " + response['user']['email'];
+				h2.innerHTML += "<p>Reputation: " + response['user']['reputation'] + "</p>";
+				h1.appendChild(h2);
+			}
+			else {
+				h1.innerHTML = "IDs of " + searchType + " posted by user " + username;
+				IdArray = response[searchType];
+				for (var i = 0; i < IdArray.length; i++){
+                                	var Id = IdArray[i];
+					if (i == IdArray.length-1){
+						h2.innerHTML += Id;
+					}
+					else {
+						h2.innerHTML += Id + ", ";
+					}
+				}
+				h1.appendChild(h2);
+			}
+			document.getElementById('results').appendChild(h1);
+		},
+		error: function(error) {
+                console.log(error);
+            	},
+                dataType: "json"
+	});
+    });
+});
+
+
+$(function() {
     $('.addQuestionForm').on('submit', function(e) {
         e.preventDefault();
 	console.log("in add question function");
@@ -144,6 +202,76 @@ $(function() {
         });
     });
 });
+
+$(function() {
+    $('.searchQuestionAdvancedForm').on('submit', function(e) {
+	e.preventDefault();
+	var form = document.getElementById("searchQuestionAdvancedForm");
+	var timestamp = form.elements['timestamp'].value;
+	var limit = form.elements['limit'].value;
+	var searchPhrase = form.elements['searchPhrase'].value;
+
+	console.log("timestamp:" + timestamp);
+	console.log("limit: " + limit);
+	console.log("searchPhrase: " + searchPhrase);
+	
+	jsonData = {};
+
+	if (timestamp != ""){
+		jsonData['timestamp'] = parseInt(timestamp);
+	}
+	if (limit != ""){
+		jsonData['limit'] = parseInt(limit);
+	}
+	if (searchPhrase != ""){
+		jsonData['q'] = searchPhrase;
+	}
+	json = JSON.stringify(jsonData);
+	console.log(json);
+	$.ajax({
+		url: "/search",
+            	contentType: "application/json; charset=utf-8",
+            	type: 'POST',
+		data: json,
+           	success: function(response) {
+			document.getElementById('results').innerHTML = "";
+			var h1 = document.createElement('h1');
+			status = response['status'];
+			if (status == "OK") {
+				h1.innerHTML = "Details of Questions from Search Results<hr>"
+				h2 = document.createElement('h2');
+				questions = response['questions'];
+				for (var i = 0; i < questions.length; i++){
+					question = questions[i];
+		                        id = question['id'];
+                        		user = question['user'];
+                       	 		username = user['username'];
+                        		userRep = user['reputation'];
+                        		title = question['title'];
+                        		score = question['score'];
+                        		view_count = question['view_count'];
+                        		answer_count = question['answer_count'];
+                        		timestamp = question['timestamp'];
+                        		body = question['body'];
+                        		accepted_answer_id = question['accepted_answer_id'];
+                        		h2.innerHTML += "id: " + id + "<p>Username of poster: " + username + "</p><p>Reputation of poster: " + userRep + "</p><p>Title: " + title + "</p><p>Body: " + body + "</p><p>timestamp: " + timestamp + "</p><p>score: " + score + "</p><p>View Count: " + view_count + "</p><p>Answer Count: " + answer_count + "</p><p>Accepted Answer ID: " + accepted_answer_id + "</p><hr>";
+				}
+				h1.appendChild(h2);
+			}
+			else {
+				h1.innerHTML = "Search failed: " + response['error'];
+			}
+			document.getElementById('results').appendChild(h1);
+		},
+            	error: function(error) {
+                	console.log(error);
+            	},
+            	dataType: "json"
+	});
+    });
+});
+	
+
 $(function() {
     $('.searchQuestionIDForm').on('submit', function(e) {
         e.preventDefault();

@@ -58,6 +58,7 @@
   <li><a href="/renderAddA" id="AddAnswer"><font color="white">Add Answer</font></a></li>
   <li><a href="/renderSearchQ" id="SearchforQuestion"><font color="white">Search for Question</font></a></li>
   <li><a href="/renderSearchA" id="Search for Answer to Question"><font color="white">Search for Answer to Question</font></a></li>
+  <li><a href="/renderSearchU" id="SearchUser"><font color="white">Search by Username</font></a></li>
 </ul>
 
 <form id="searchQuestionIDForm" class="searchQuestionIDForm" method="POST">
@@ -67,7 +68,27 @@
                 </div>
         </div>
         <div class="form-group">
-            <button type="submit" class="btn btn-primary btn-lg">Search for Question</button>
+            <button type="submit" class="btn btn-primary btn-lg">Search by ID</button>
+        </div>
+</form>
+<form id="searchQuestionAdvancedForm" class="searchQuestionAdvancedForm" method="POST">
+        <div class="form-group">
+                <div class="row">
+                        <div class="col-xs-6"><input type="text" class="form-control" name="timestamp" placeholder="Timestamp (in UNIX time)"</div>
+                </div>
+        </div>
+	<div class="form-group">
+		<div class="row">
+                        <div class="col-xs-6"><input type="text" class="form-control" name="limit" placeholder="Maximum Questions to Display"</div>
+                </div>
+	</div>
+        <div class="form-group">
+                <div class="row">
+                        <div class="col-xs-6"><input type="text" class="form-control" name="searchPhrase" placeholder="Search Phrase"</div>
+                </div>
+	</div>
+        <div class="form-group">
+            <button type="submit" class="btn btn-primary btn-lg">Advanced Search</button>
         </div>
 </form>
 <div id="results">
