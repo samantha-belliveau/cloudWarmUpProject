@@ -171,8 +171,8 @@ def addUser():
 	password = request_json['password']
 	email = request_json['email']
 	
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/', 27017)
+	tttDB = client['usersDB']
 	users = tttDB['users']
 	games = []
 	result = users.insert_one({"reputation": 1, "games":games, "currentGame": "null", "username": username, "password": password, "email": email, "verified": "false"})
@@ -201,8 +201,8 @@ def verifyUser():
 	email = request_json['email']
 	key = request_json['key']
         
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/', 27017)
+	tttDB = client['usersDB']
 	users = tttDB['users']
 	
 	print(key)
@@ -234,8 +234,8 @@ def login():
 	username = request_json['username']
 	password = request_json['password']
 
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/')
+	tttDB = client['usersDB']
 	users = tttDB['users']
 	
 	query = {'username':username, 'password':password}
@@ -315,16 +315,16 @@ def getUsersAnswers(username):
 
 
 def getUserByName(username):
-	client = MongoClient('localhost', 27017)
-	userDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/')
+	userDB = client['usersDB']
 	users = userDB['users']
 
 	user = users.find_one({'username':username})
 	return user
 
 def getUser(Id):
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/')
+	tttDB = client['usersDB']
 	users = tttDB['users']
 
 	user = users.find_one({'_id': ObjectId(Id)})
@@ -460,8 +460,8 @@ def upvoteAnswers(answerId):
 	upvotesCollection = questionsDB['answerUpvotes']
 	answersCollection = questionsDB['answers']
 
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/')
+	tttDB = client['usersDB']
 	users = tttDB['users']
 
 	changeValue = -1
@@ -533,8 +533,8 @@ def upvoteQuestions(questionId):
 	upvotesCollection = questionsDB['upvotes']
 	questionsCollection = questionsDB['questions']
 
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/')
+	tttDB = client['usersDB']
 	users = tttDB['users']	
 
 	changeValue = -1
@@ -601,7 +601,7 @@ def getAnswers(questionId):
 	results = answersCollection.find(query)
 	answersArray = []
 	if results == None:
-		print("Invalid question id, or question has no answers for questionID:%s", questionId)
+		print("Invalid question id, or question has no answers for questionID", questionId)
 		return json.dumps({'status':'error', 'error':'Invalid question id, or question has no answers'})
 	else:
 		for answer in results:
@@ -813,8 +813,8 @@ def addAnswer(questionId):
 		return json.dumps({'status':'error', 'error':'Failed to add answer'})
 
 def isLoggedIn(currentId):
-	client = MongoClient('localhost', 27017)
-	tttDB = client['ttt']
+	client = MongoClient('mongodb://192.168.122.15:27017/')
+	tttDB = client['usersDB']
 	users = tttDB['users']
 
 	query = {'_id':ObjectId(currentId)}
