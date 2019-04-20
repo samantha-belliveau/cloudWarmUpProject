@@ -384,7 +384,8 @@ def getQuestion(questionId):
 			questionsDB = client['questionsDB']
 			questionsCollection = questionsDB['questions']
 			viewersCollection = questionsDB['questionViewers']
-			
+			answersCollection = questionsDB['answers']
+
 			query = {'_id': ObjectId(questionId)}
 			question = questionsCollection.find_one(query)
 			
@@ -392,10 +393,23 @@ def getQuestion(questionId):
 				return Response(status=400)
 			
 			qPosterID = question['userID']
+			mediaToDelete = question['media']
 			if qPosterID != currentCookie:
 				return Response(status=401)
-			
+						
 			questionsCollection.delete_one(query)
+		
+			query = {'questionID':questionId}
+			answers = answersCollection.find(query)
+
+			for answer in answers:
+				mediaToDelete += answer['media']
+			answersCollection.delete_many(query)
+
+			url = 'http://130.245.171.38/delete'
+
+			response = requests.post(url, json={"mediaToDelete":mediaToDelete})
+
 			return Response(status=200)
 
 @app.route("/answers/<answerId>/accept", methods=['POST'])
@@ -605,6 +619,9 @@ def search():
 	limit = 25
 	accepted = False
 	searchPhrase = ""
+	sort_by = "score"
+	tags = None
+	hasMedia = False
 	try:
 		timestamp = request_json['timestamp']
 		print("Setting timestamp to %d", timestamp)
@@ -622,6 +639,20 @@ def search():
 		print("Setting accepted to $s", accepted)
 	except KeyError:
 		print("Setting accepted to default = false")
+	
+	try:
+		sort_by = request_json['sort_by']
+	except KeyError:
+		print("Setting sort_by to default")
+
+	try:
+		tags = request_json['tags']
+	except KeyError:
+		print("Setting tags to default")
+	try:
+		hasMedia = request_json['has_media']
+	except KeyError:
+		print("Setting hasMedia to default")
 
 	objectIDArray = []
 	try:
@@ -673,8 +704,16 @@ def search():
 		query['_id'] = {'$in':objectIDArray}
 	if accepted:
 		query['accepted_answer_id'] = {'$ne':None}
-
-	results = questionsCollection.find(query).sort("timestamp", pymongo.DESCENDING)
+	if hasMedia:
+		query['media'] = {'$ne':[]}
+	if tags != None:
+		query['tags'] = {'$all':tags}
+	
+	results = None
+	if sort_by == "timestamp":
+		results = questionsCollection.find(query).sort("timestamp", pymongo.DESCENDING)
+	else:
+		results = questionsCollection.find(query).sort("score", pymongo.DESCENDING)
 	questionsArray = []
 	count = 0
 	for question in results:
@@ -747,7 +786,7 @@ def addAnswer(questionId):
 	try:	
 		media = request_json['media']
 	except KeyError:
-		media = None
+		media = []
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
@@ -831,7 +870,7 @@ def addQuestion():
 	try:
 		media = request_json['media']
 	except KeyError:
-		media = None
+		media = []
 
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
@@ -848,18 +887,23 @@ def addQuestion():
 		return json.dumps({'status':'error', 'error':'Failed to add question'})
 
 def indexQuestion(questionID, title, body):
+	tInit = time.time()
 	client = MongoClient('mongodb://192.168.122.12:27017/')
 	searchIndexDB = client['questionsIndex']
 	searchIndexCollection = searchIndexDB['questionsIndex']
 
+	title = title.lower()
+	body = body.lower()
 	titleWords = title.split(" ")
 	bodyWords = body.split(" ")
 	print('here')
 	contents = titleWords + bodyWords
-	for word in contents:
-		word = word.lower()
-		searchIndexCollection.update_one({"word":word}, {'$addToSet': {"ids":questionID}}, upsert=True)
+	#for word in contents:
+	#	searchIndexCollection.update_one({"word":word}, {'$addToSet': {"ids":questionID}}, upsert=True)
+	searchIndexCollection.update_many({"word": {"$in": contents}}, {'$addToSet': {"ids":questionID}}, upsert=True)
 	client.close()
+	tEnd = time.time()
+	print(tEnd - tInit)
 
 @app.route("/cookieTest", methods=['POST'])
 def testCookie():
