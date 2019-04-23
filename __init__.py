@@ -81,11 +81,13 @@ def callback(ch, method, properties, body):
 	return json.dumps({'msg':str(body)})
 @app.route("/")
 def hello():
-    try:
-        name = request.form['name']
-        return render_template('ttt.html', name=name, date=dateStr)
-    except:
-        return render_template('ttt.html', name="")
+    print("HEREEEEE")
+    return render_template('searchUser.html')
+    #try:
+    #    name = request.form['name']
+    #    return render_template('ttt.html', name=name, date=dateStr)
+    #except:
+    #    return render_template('ttt.html', name="")
 
 @app.route("/renderSearchU")
 def renderSearchU():
@@ -187,12 +189,12 @@ def addUser():
 		msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email\n validation key: <" + str(result.inserted_id) + ">")
 		msg['Subject'] = "Email Verification for TTT"
 		context = ssl.create_default_context()
-		s = smtplib.SMTP(smtp_server, port)
-		s.starttls(context=context)
-		s.login(sender_email, password)
-		s.sendmail(sender_email, receiver_email, msg.as_string())
+	#	s = smtplib.SMTP(smtp_server, port)
+	#	s.starttls(context=context)
+	#	s.login(sender_email, password)
+	#	s.sendmail(sender_email, receiver_email, msg.as_string())
 		return json.dumps({'status': 'OK'})
-	return json.dumps({'status': 'error', 'error':'Failed to add user'})
+	return json.dumps({'status': 'error', 'error':'Failed to add user'}), 400
 
 
 @app.route("/verify", methods=['POST'])
@@ -224,9 +226,9 @@ def verifyUser():
 		if found:
 			users.update_one({'_id':ObjectId(key)}, {'$set':{'verified':'true'}})
 			return json.dumps({'status':'OK'})
-		return json.dumps({'status':'error', 'error':'Invalid email or validation key'})
+		return json.dumps({'status':'error', 'error':'Invalid email or validation key'}), 403
 	except:
-		return json.dumps({'status':'error', 'error':'Invalid email or validation key'})
+		return json.dumps({'status':'error', 'error':'Invalid email or validation key'}), 403
 
 @app.route("/login", methods=['POST'])
 def login():
@@ -253,7 +255,7 @@ def login():
 		response.set_cookie('_id', str(ID))
 		return response
 	
-	return json.dumps({'status':'error', 'error':'User not verified, or invalid username/password'})
+	return json.dumps({'status':'error', 'error':'User not verified, or invalid username/password'}), 401
 
 @app.route("/logout", methods=['POST', 'GET'])
 def logout():
@@ -269,7 +271,7 @@ def getUserInfo(username):
 	user = getUserByName(username)
 
 	if user == None:
-		return json.dumps({'status':'error', 'error':'No user with given username exists'})
+		return json.dumps({'status':'error', 'error':'No user with given username exists'}), 400
 	
 	userInfo = {'email':user['email'], 'reputation':user['reputation']}
 	print("returning the following info: ", userInfo)
@@ -280,7 +282,7 @@ def getUsersQuestions(username):
 	user = getUserByName(username)
 
 	if user == None:
-		return json.dumps({'status':'error', 'error':'No user with given username exists'})	
+		return json.dumps({'status':'error', 'error':'No user with given username exists'}), 400	
 
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
@@ -299,7 +301,7 @@ def getUsersAnswers(username):
 	user = getUserByName(username)
 
 	if user == None:
-		return json.dumps({'status':'error', 'error':'No user with given username exists'})
+		return json.dumps({'status':'error', 'error':'No user with given username exists'}), 400
 	
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
@@ -346,7 +348,7 @@ def getQuestion(questionId):
 		question = questionsCollection.find_one(query)
 
 		if question == None:
-			return json.dumps({'status':'error', 'error':'Invalid question id'})
+			return json.dumps({'status':'error', 'error':'Invalid question id'}), 400
 
 		currentCookie = request.cookies.get('_id')
 		newViewCount = question['view_count']
@@ -602,7 +604,7 @@ def getAnswers(questionId):
 	answersArray = []
 	if results == None:
 		print("Invalid question id, or question has no answers for questionID", questionId)
-		return json.dumps({'status':'error', 'error':'Invalid question id, or question has no answers'})
+		return json.dumps({'status':'error', 'error':'Invalid question id, or question has no answers'}), 400
 	else:
 		for answer in results:
 			currentAnswer = {'user':answer['user'], 'body':answer['body'], 'score':answer['score'], 'is_accepted':answer['is_accepted'], 'timestamp':int(answer['timestamp']), 'id':str(answer['_id']), 'media':answer['media']}
@@ -630,7 +632,7 @@ def search():
 	try:
 		limit = request_json['limit']
 		if limit > 100:
-			return json.dumps({'status':'error', 'error':'Cannot have limit higher than 100'})
+			return json.dumps({'status':'error', 'error':'Cannot have limit higher than 100'}), 401
 		print("Setting limit to %d", limit)
 	except KeyError:
 		print("Setting limit to default = 25")
@@ -776,13 +778,13 @@ def findMatches(results, searchWords):
 def addAnswer(questionId):
 	currentCookie = request.cookies.get('_id')
 	if isLoggedIn(currentCookie) == False:
-		return json.dumps({'status':'error', 'error':'User is not logged in'})
+		return json.dumps({'status':'error', 'error':'User is not logged in'}), 401
 
 	request_json = request.get_json()
 	try:
 		body = request_json['body']
 	except KeyError:
-		return json.dumps({'status':'error', 'error':'Missing answer body'})
+		return json.dumps({'status':'error', 'error':'Missing answer body'}), 400
 	try:	
 		media = request_json['media']
 	except KeyError:
@@ -796,7 +798,7 @@ def addAnswer(questionId):
 	question = questionsCollection.find_one(query)
 
 	if question == None:
-		return json.dumps({'status':'error', 'error':'Invalid quetion id'})
+		return json.dumps({'status':'error', 'error':'Invalid quetion id'}), 400
 
 	username = (getUser(currentCookie))['username']
 	score = 0
@@ -810,7 +812,7 @@ def addAnswer(questionId):
 		print("answer ", str(result.inserted_id), " submitted by user ", username)
 		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
 	else:
-		return json.dumps({'status':'error', 'error':'Failed to add answer'})
+		return json.dumps({'status':'error', 'error':'Failed to add answer'}), 400
 
 def isLoggedIn(currentId):
 	client = MongoClient('mongodb://192.168.122.15:27017/')
@@ -852,12 +854,12 @@ def getMedia(mediaId):
 
 @app.route("/questions/add", methods=['POST'])
 def addQuestion():
-	print("in question method")
+	#print("in question method")
 	currentCookie = request.cookies.get('_id')
-	print(currentCookie)
+	#print(currentCookie)
 
 	if isLoggedIn(currentCookie) == False:
-		return json.dumps({'status':'error', 'error':'User is not logged in'})	
+		return json.dumps({'status':'error', 'error':'User is not logged in'}), 401	
 
 	request_json = request.get_json()
 	print(request_json)
@@ -866,7 +868,7 @@ def addQuestion():
 		body = request_json['body']
 		tagsArray = request_json['tags']
 	except KeyError:
-		return json.dumps({'status':'error', 'error':'Missing input data'})
+		return json.dumps({'status':'error', 'error':'Missing input data'}), 400
 	try:
 		media = request_json['media']
 	except KeyError:
@@ -884,7 +886,7 @@ def addQuestion():
 		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
 	else:
 		client.close()
-		return json.dumps({'status':'error', 'error':'Failed to add question'})
+		return json.dumps({'status':'error', 'error':'Failed to add question'}), 400
 
 def indexQuestion(questionID, title, body):
 	tInit = time.time()
@@ -1158,4 +1160,4 @@ def AIMove(grid):
 
 
 if __name__ == "__main__":
-    app.run()
+    app.run(host='0.0.0.0')
