@@ -15,12 +15,14 @@ from cassandra.cluster import Cluster
 from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import SimpleStatement
 import requests
+import uuid
 
 app = Flask(__name__)
 
 name = ""
 date = datetime.datetime.today()
 dateStr = date.strftime("%Y-%m-%d")
+
 
 @app.route("/deposit", methods=['POST'])
 def deposit():
@@ -37,17 +39,29 @@ def deposit():
 
 @app.route("/speak", methods=['GET', 'POST'])
 def speak():
-	request_json = request.get_json()
-	key = request_json['key']
-	msg = request_json['msg']
+	#request_json = request.get_json()
+	#key = request_json['key']
+	#msg = request_json['msg']
 
-	connection = pika.BlockingConnection(pika.ConnectionParameters(host='localhost'))
+	#connection = pika.BlockingConnection(pika.ConnectionParameters(host='192.168.122.8'))
+	#channel = connection.channel()
+
+	#channel.exchange_declare(exchange='hw3')
+
+	#channel.basic_publish(exchange='hw3', routing_key=key, body=msg)
+	#connection.close()
+	credentials = pika.PlainCredentials('cloudUser', 'password')
+	parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
+	connection = pika.BlockingConnection(parameters)
 	channel = connection.channel()
 
-	channel.exchange_declare(exchange='hw3')
+	channel.queue_declare(queue='hello')
 
-	channel.basic_publish(exchange='hw3', routing_key=key, body=msg)
+	channel.basic_publish(exchange='', routing_key='hello', body='Hello World!')
+	print(" [x] Sent 'Hello World!'")
 	connection.close()
+
+
 
 	return json.dumps({'status':'OK'})
 
@@ -882,7 +896,7 @@ def addQuestion():
 		return json.dumps({'status':'error', 'error':'User is not logged in'}), 401	
 
 	request_json = request.get_json()
-	print(request_json)
+	#print(request_json)
 	try:
 		title = request_json['title']
 		body = request_json['body']
@@ -908,10 +922,35 @@ def addQuestion():
 	if answersWithMedia != None:
 		return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
 
+#	client.close()
+#
+	before = time.time()
+#	credentials = pika.PlainCredentials('cloudUser', 'password')
+#	parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
+#	connection = pika.BlockingConnection(parameters)
+#	channel = connection.channel()
+
+#	channel.queue_declare(queue='hello')
+#
+#	qID = ObjectId()
+#	content = json.dumps({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None, '_id':str(qID)})
+#	channel.basic_publish(exchange='', routing_key='hello', body=content)
+#	print(" [x] Sent 'Hello World!'")
+#	after = time.time()
+#	print(after - before)
+#	connection.close()
+
+#	indexQuestion(str(qID), title, body)
+
+#	return json.dumps({'status':'OK', 'id': str(qID)})	
+	
 	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
 	if result.acknowledged == True:
+		after = time.time()
+		print("time: ", after - before)
 		indexQuestion(str(result.inserted_id), title, body)
 		client.close()
+		
 		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
 	else:
 		client.close()
