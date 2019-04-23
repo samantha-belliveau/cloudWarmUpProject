@@ -81,7 +81,7 @@ def callback(ch, method, properties, body):
 	return json.dumps({'msg':str(body)})
 @app.route("/")
 def hello():
-    print("HEREEEEE")
+    #print("HEREEEEE")
     return render_template('searchUser.html')
     #try:
     #    name = request.form['name']
@@ -181,20 +181,38 @@ def addUser():
 	#result = users.insert_one({"username": "test", "password": "hello", "email": "e", "verified": "false"})
 
 	if result.acknowledged == True:
-		port = 587  # For starttls
-		smtp_server = "smtp.gmail.com"
-		sender_email = "cse356cloudproject@gmail.com"
-		receiver_email = email
-		password = "cse356cloud"
-		msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email\n validation key: <" + str(result.inserted_id) + ">")
-		msg['Subject'] = "Email Verification for TTT"
-		context = ssl.create_default_context()
+		key = str(result.inserted_id)
+	
+		url = "http://192.168.122.15:5000"
+		response = requests.post(url, json={"email":email, "key":key})
+	
+	#	msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email\n validation key: <" + str(result.inserted_id) + ">")
+	#	msg['From'] = "ubuntu@userdb.cloud.compas.cs.stonybrook.edu"
+	#	msg['To'] = email
+	#	msg['Subject'] = "Email Verification for SBStackOverflow"
+	#	msg.attach()
+	#	smtp = smtplib.SMTP("userdb.cloud.compas.cs.stonybrook.edu", 25)
+	#	smtp.sendmail("ubuntu@userdb.cloud.compas.cs.stonybrook.edu", email, msg.as_string() )
+	#	smtp.close()
+		return json.dumps({'status': 'OK'})
+	 
+	return json.dumps({'status': 'error', 'error':'Failed to add user'}), 400
+
+	#if result.acknowledged == True:
+	#	port = 587  # For starttls
+	#	smtp_server = "smtp.gmail.com"
+	#	sender_email = "cse356cloudproject@gmail.com"
+	#	receiver_email = email
+	#	password = "cse356cloud"
+	#	msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email\n validation key: <" + str(result.inserted_id) + ">")
+	#	msg['Subject'] = "Email Verification for TTT"
+	#	context = ssl.create_default_context()
 	#	s = smtplib.SMTP(smtp_server, port)
 	#	s.starttls(context=context)
 	#	s.login(sender_email, password)
 	#	s.sendmail(sender_email, receiver_email, msg.as_string())
-		return json.dumps({'status': 'OK'})
-	return json.dumps({'status': 'error', 'error':'Failed to add user'}), 400
+	#	return json.dumps({'status': 'OK'})
+	#return json.dumps({'status': 'error', 'error':'Failed to add user'}), 400
 
 
 @app.route("/verify", methods=['POST'])
@@ -207,7 +225,7 @@ def verifyUser():
 	tttDB = client['usersDB']
 	users = tttDB['users']
 	
-	print(key)
+	#print(key)
 	if key == 'abracadabra':
 		query = {'email':email}
 		result = users.find(query)
@@ -330,6 +348,8 @@ def getUser(Id):
 	users = tttDB['users']
 
 	user = users.find_one({'_id': ObjectId(Id)})
+	if user == None:
+		return None
 	return {'username':user['username'], 'reputation':user['reputation']}
 
 @app.route("/questions/<questionId>", methods=['GET', 'DELETE'])
@@ -679,10 +699,10 @@ def search():
 				qIDs = qsWithWord['ids']
 				if start:
 					qContainsWord = qIDs
-					print(qContainsWord)
+					#print(qContainsWord)
 					start = False
 				else:
-					print("contains ", word)
+					#print("contains ", word)
 					for qID in qIDs:
 						if not (qID in qContainsWord):
 							qContainsWord.append(qID)
@@ -694,13 +714,13 @@ def search():
 					#		print(qContainsWord)
 			for ID in qContainsWord:
 				objectIDArray.append(ObjectId(ID))
-			print("IDS:", objectIDArray)
+			#print("IDS:", objectIDArray)
 	except KeyError:
 		print("Setting search phrase to nothing")
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
-	print("matching qs", objectIDArray)
+	#print("matching qs", objectIDArray)
 	query = {'timestamp':{'$lte': timestamp}}
 	if len(objectIDArray) > 0:
 		query['_id'] = {'$in':objectIDArray}
@@ -726,7 +746,7 @@ def search():
 			questionJson = {'id':str(question['_id']), 'title':question['title'], 'user':user, 'body':question['body'], 'score':question['score'], 'view_count':question['view_count'], 'answer_count':question['answer_count'], 'timestamp':question['timestamp'], 'media':question['media'], 'tags':question['tags'], 'accepted_answer_id':question['accepted_answer_id']}
 			questionsArray.append(questionJson)
 			count = count + 1
-	print("count ", count)
+	#print("count ", count)
 	searchWords = searchPhrase.split(" ")
 	if (count < limit):
 		print("looking for not exact matches")
@@ -765,10 +785,10 @@ def findMatches(results, searchWords):
 	matchesDictionary = {}
 	print("finding matches")
 	for question in results:
-		print("here")
+		#print("here")
 		numMatches = 0
 		for word in searchWords:
-			print(word)
+			#print(word)
 			if word in question['title'].lower() or word in question['body'].lower():
 				numMatches = numMatches + 1
 		matchesDictionary[str(question['_id'])] = numMatches
@@ -834,11 +854,11 @@ def addMedia():
 
 	f = request.files['content']
 	fileType = f.mimetype
-	print("filetype", fileType)
+	#print("filetype", fileType)
 	fName = f.filename
 	
 	response = requests.post('http://130.245.171.38/deposit', files={'contents': (fName, f, fileType)})
-	print(response.json())
+	#print(response.json())
 	return json.dumps(response.json())
 
 @app.route("/media/<mediaId>", methods=['GET'])
@@ -871,13 +891,22 @@ def addQuestion():
 		return json.dumps({'status':'error', 'error':'Missing input data'}), 400
 	try:
 		media = request_json['media']
+		print(media)
 	except KeyError:
 		media = []
 
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
+	answersCollection = questionsDB['answers']
 
+	questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
+	if questionsWithMedia != None:
+		return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
+
+	answersWithMedia = answersCollection.find_one({"media":{"$in":media}})
+	if answersWithMedia != None:
+		return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
 
 	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
 	if result.acknowledged == True:
@@ -898,14 +927,14 @@ def indexQuestion(questionID, title, body):
 	body = body.lower()
 	titleWords = title.split(" ")
 	bodyWords = body.split(" ")
-	print('here')
+	#print('here')
 	contents = titleWords + bodyWords
 	#for word in contents:
 	#	searchIndexCollection.update_one({"word":word}, {'$addToSet': {"ids":questionID}}, upsert=True)
 	searchIndexCollection.update_many({"word": {"$in": contents}}, {'$addToSet': {"ids":questionID}}, upsert=True)
 	client.close()
 	tEnd = time.time()
-	print(tEnd - tInit)
+	#print(tEnd - tInit)
 
 @app.route("/cookieTest", methods=['POST'])
 def testCookie():
