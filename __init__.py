@@ -882,7 +882,7 @@ def addQuestion():
 		return json.dumps({'status':'error', 'error':'User is not logged in'}), 401	
 
 	request_json = request.get_json()
-	#print(request_json)
+	print(request_json)
 	try:
 		title = request_json['title']
 		body = request_json['body']
@@ -891,13 +891,22 @@ def addQuestion():
 		return json.dumps({'status':'error', 'error':'Missing input data'}), 400
 	try:
 		media = request_json['media']
+		print(media)
 	except KeyError:
 		media = []
 
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
+	answersCollection = questionsDB['answers']
 
+	questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
+	if questionsWithMedia != None:
+		return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
+
+	answersWithMedia = answersCollection.find_one({"media":{"$in":media}})
+	if answersWithMedia != None:
+		return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
 
 	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
 	if result.acknowledged == True:
