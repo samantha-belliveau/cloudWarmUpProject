@@ -1,5 +1,6 @@
 from flask import Flask, jsonify, render_template, Response, make_response, request, json
 from pymongo import MongoClient
+import gridfs
 import pymongo
 from bson.objectid import ObjectId
 import datetime
@@ -16,6 +17,7 @@ from cassandra.auth import PlainTextAuthProvider
 from cassandra.cluster import SimpleStatement
 import requests
 import uuid
+import os
 
 app = Flask(__name__)
 
@@ -193,6 +195,8 @@ def addUser():
 	games = []
 	result = users.insert_one({"reputation": 1, "games":games, "currentGame": "null", "username": username, "password": password, "email": email, "verified": "false"})
 	#result = users.insert_one({"username": "test", "password": "hello", "email": "e", "verified": "false"})
+
+	client.close()
 
 	if result.acknowledged == True:
 		key = str(result.inserted_id)
@@ -865,26 +869,49 @@ def addMedia():
 	currentCookie = request.cookies.get('_id')
 	if isLoggedIn(currentCookie) == False:
 		return make_response(json.dumps({'status':'error', 'error':'Must be logged in to add media'}), 401)
-
+	#print("adding media")
 	f = request.files['content']
-	fileType = f.mimetype
-	#print("filetype", fileType)
+	#fileType = magic.from_file(f, mime=True)
+	fType = f.mimetype
 	fName = f.filename
-	
-	response = requests.post('http://130.245.171.38/deposit', files={'contents': (fName, f, fileType)})
-	#print(response.json())
-	return json.dumps(response.json())
+	toInsert = f.read()
+	db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
+	fs = gridfs.GridFS(db)
+	a = fs.put(toInsert, fileType=fType, poster=currentCookie)
+	return json.dumps({"status":"OK", "id":str(a)})
+	#return fs.get(a).read(), 201, {'Content-Type':fType}
+	#questionsDB = client['questionsDB']
+	#mediaCollection = questionsDB['media']
+
+
+	#filename, file_extension = os.path.splitext(fName)
+	#print("filetype", fileType)
+	#print("hererrreee")	
+	mediaId = uuid.uuid1()
+	#try:
+	#	requests.post('http://130.245.171.38/deposit', files={'contents': (fName, f, fileType)})
+		#print(response.json())
+	#
+	#except requests.exceptions.Timeout:	
+	#	return json.dumps({"status":"OK", "id":str(mediaId)})
+
+	return json.dumps({"status":"OK", "id":str(mediaId)})
 
 @app.route("/media/<mediaId>", methods=['GET'])
 def getMedia(mediaId):
+	print('hereeeee')
+	db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
+	fs = gridfs.GridFS(db)
+	doc = fs.get(ObjectId(mediaId))
+	return doc.read(), 201, {'Content-Type': doc.fileType}
 	
-	url = 'http://130.245.171.38/retrieve?mediaID=' + mediaId
+	#url = 'http://130.245.171.38/retrieve?mediaID=' + mediaId
 	
-	response = requests.get(url)
-	contents = response.content
-	headers = response.headers
-	fileType = str(headers['Content-Type'])
-	return contents, 201, {'Content-Type': fileType}
+	#response = requests.get(url)
+	#contents = response.content
+	#headers = response.headers
+	#fileType = str(headers['Content-Type'])
+	#return contents, 201, {'Content-Type': fileType}
 
 @app.route("/questions/add", methods=['POST'])
 def addQuestion():
@@ -914,6 +941,14 @@ def addQuestion():
 	questionsCollection = questionsDB['questions']
 	answersCollection = questionsDB['answers']
 
+	db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
+	fs = gridfs.GridFS(db)
+	for mediaId in media:
+		doc = fs.get(ObjectId(mediaId))
+		poster = doc.poster
+		if poster != currentCookie:
+			return json.dumps({'status':'error', 'error':'media does not belong to user'}), 401
+
 	questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
 	if questionsWithMedia != None:
 		return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
@@ -924,7 +959,7 @@ def addQuestion():
 
 #	client.close()
 #
-	before = time.time()
+#	before = time.time()
 #	credentials = pika.PlainCredentials('cloudUser', 'password')
 #	parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
 #	connection = pika.BlockingConnection(parameters)
@@ -946,8 +981,8 @@ def addQuestion():
 	
 	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
 	if result.acknowledged == True:
-		after = time.time()
-		print("time: ", after - before)
+	#	after = time.time()
+	#	print("time: ", after - before)
 		indexQuestion(str(result.inserted_id), title, body)
 		client.close()
 		
