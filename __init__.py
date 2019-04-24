@@ -948,14 +948,23 @@ def addQuestion():
 		poster = doc.poster
 		if poster != currentCookie:
 			return json.dumps({'status':'error', 'error':'media does not belong to user'}), 401
+	if media != []:
+		client2 = MongoClient('mongodb://192.168.122.15:27017/')
+		questionsDB2 = client2['questions']
+		questionsCollection2 = questionsDB2['questions']
+		
+		questionsWithMedia2 = questionsCollection2.find_one({"media":{"$in":media}})
+		if questionsWithMedia2 != None:
+			return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
+		client2.close()		
 
-	questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
-	if questionsWithMedia != None:
-		return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
+		questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
+		if questionsWithMedia != None:
+			return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
 
-	answersWithMedia = answersCollection.find_one({"media":{"$in":media}})
-	if answersWithMedia != None:
-		return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
+		answersWithMedia = answersCollection.find_one({"media":{"$in":media}})
+		if answersWithMedia != None:
+			return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
 
 #	client.close()
 #
@@ -978,8 +987,17 @@ def addQuestion():
 #	indexQuestion(str(qID), title, body)
 
 #	return json.dumps({'status':'OK', 'id': str(qID)})	
-	
-	result = questionsCollection.insert_one({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
+	qid = ObjectId()
+	string = str(qid)
+	print(string)
+	if string[-1] in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+		print(1)
+		client.close()
+		client = MongoClient('mongodb://192.168.122.15:27017/')
+		questionsDB = client['questionsDB']
+		questionsCollection = questionsDB['questions']
+
+	result = questionsCollection.insert_one({"_id":qid, "title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
 	if result.acknowledged == True:
 	#	after = time.time()
 	#	print("time: ", after - before)
