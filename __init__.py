@@ -189,20 +189,32 @@ def addUser():
 	password = request_json['password']
 	email = request_json['email']
 	
-	client = MongoClient('mongodb://192.168.122.15:27017/', 27017)
-	tttDB = client['usersDB']
-	users = tttDB['users']
-	games = []
-	result = users.insert_one({"reputation": 1, "games":games, "currentGame": "null", "username": username, "password": password, "email": email, "verified": "false"})
+	#client = MongoClient('mongodb://192.168.122.15:27017/', 27017)
+	#tttDB = client['usersDB']
+	#users = tttDB['users']
+	#games = []
+
+	credentials = pika.PlainCredentials('cloudUser', 'password')
+	parameters = pika.ConnectionParameters(host='192.168.122.15',credentials=credentials)
+	connection = pika.BlockingConnection(parameters)
+	channel = connection.channel()
+
+	channel.queue_declare(queue='hello')
+#
+	qID = ObjectId()
+	content = json.dumps({"_id":str(qID), "reputation": 1, "username": username, "password": password, "email": email, "verified": "false"})
+	channel.basic_publish(exchange='', routing_key='hello', body=content)
+
+	#result = users.insert_one({"reputation": 1, "games":games, "currentGame": "null", "username": username, "password": password, "email": email, "verified": "false"})
 	#result = users.insert_one({"username": "test", "password": "hello", "email": "e", "verified": "false"})
 
-	client.close()
+	#client.close()
 
-	if result.acknowledged == True:
-		key = str(result.inserted_id)
-	
-		url = "http://192.168.122.15:5000"
-		response = requests.post(url, json={"email":email, "key":key})
+	#if result.acknowledged == True:
+	#	key = str(result.inserted_id)
+	#
+	#	url = "http://192.168.122.15:5000"
+	#	response = requests.post(url, json={"email":email, "key":key})
 	
 	#	msg = MIMEText("Please visit http://130.245.170.251/verifyEmail and enter the following key to verify your email\n validation key: <" + str(result.inserted_id) + ">")
 	#	msg['From'] = "ubuntu@userdb.cloud.compas.cs.stonybrook.edu"
@@ -212,9 +224,9 @@ def addUser():
 	#	smtp = smtplib.SMTP("userdb.cloud.compas.cs.stonybrook.edu", 25)
 	#	smtp.sendmail("ubuntu@userdb.cloud.compas.cs.stonybrook.edu", email, msg.as_string() )
 	#	smtp.close()
-		return json.dumps({'status': 'OK'})
+	return json.dumps({'status': 'OK'})
 	 
-	return json.dumps({'status': 'error', 'error':'Failed to add user'}), 400
+	#return json.dumps({'status': 'error', 'error':'Failed to add user'}), 400
 
 	#if result.acknowledged == True:
 	#	port = 587  # For starttls
@@ -250,6 +262,12 @@ def verifyUser():
 		found = False
 		for x in result:
 			found = True
+		#if not found:
+		#	#time.sleep(10)
+		#	result = users.find(query)
+		#for x in result:
+		#	found = True
+		#	print('success')
 		if found:
 			users.update_one({'email':email},{'$set':{'verified':'true'}})
 			return json.dumps({'status':'OK'})
@@ -259,6 +277,11 @@ def verifyUser():
 		found = False
 		for x in result:
 			found = True
+		#if not found:
+		#	result = users.find(query)
+		#for x in result:
+		#	found = True
+		#	print('success')
 		if found:
 			users.update_one({'_id':ObjectId(key)}, {'$set':{'verified':'true'}})
 			return json.dumps({'status':'OK'})
@@ -473,7 +496,7 @@ def acceptAnswer(answerId):
 	query = {'_id':ObjectId(questionID)}
 	question = questionsCollection.find_one(query)
 	userID = question['userID']
-	
+		
 
 	if userID != currentCookie:
 		return make_response(json.dumps({'status':'error', 'error':'Must question poster to accept an answer'}), 401)
@@ -598,8 +621,10 @@ def upvoteQuestions(questionId):
 	# results == none, there are no upvotes or downvotes, so just add one or subtract one as needed
 		upvotesCollection.insert_one({"userID":currentCookie, "questionID":questionId, "upvote":upvote})
 		if upvote:
+			print("upvote ", userID, "'s reputation by ", changeValue)
 			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
 		else:
+			print("downvote ", userID, "'s reputation by ", changeValue)	
 			users.update_one({'_id':ObjectId(userID), 'reputation':{"$ne":1}}, { "$inc": {"reputation": changeValue}})
 	else:
 		previousVote = results['upvote']
@@ -836,8 +861,46 @@ def addAnswer(questionId):
 	question = questionsCollection.find_one(query)
 
 	if question == None:
+		client.close()
 		return json.dumps({'status':'error', 'error':'Invalid quetion id'}), 400
 
+	if media != []:
+		db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
+		fs = gridfs.GridFS(db)
+		for mediaId in media:
+			doc = fs.get(ObjectId(mediaId))
+			poster = doc.poster
+			if poster != currentCookie:
+				return json.dumps({'status':'error', 'error':'media does not belong to user'}), 401
+		
+		print("probably not supposed to be here")
+		client = MongoClient('mongodb://192.168.122.8:27017/')
+		questionsDB = client['questionsDB']
+		questionsCollection = questionsDB['questions']
+		answersCollection = questionsDB['answers']
+		
+		client2 = MongoClient('mongodb://192.168.122.15:27017/')
+		questionsDB2 = client2['questionsDB']
+		questionsCollection2 = questionsDB2['questions']
+		
+		questionsWithMedia2 = questionsCollection2.find_one({"media":{"$in":media}})
+		if questionsWithMedia2 != None:
+			client2.close()		
+			client.close()
+			return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
+
+		questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
+		if questionsWithMedia != None:
+			client2.close()		
+			client.close()
+			return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
+
+		answersWithMedia = answersCollection.find_one({"media":{"$in":media}})
+		if answersWithMedia != None:
+			client2.close()		
+			client.close()
+			return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
+	
 	username = (getUser(currentCookie))['username']
 	score = 0
 	is_accepted = False
@@ -853,16 +916,20 @@ def addAnswer(questionId):
 		return json.dumps({'status':'error', 'error':'Failed to add answer'}), 400
 
 def isLoggedIn(currentId):
-	client = MongoClient('mongodb://192.168.122.15:27017/')
-	tttDB = client['usersDB']
-	users = tttDB['users']
-
-	query = {'_id':ObjectId(currentId)}
-	result = users.find_one(query)
-
-	if result == None:
+	if currentId == "" or currentId == None:
 		return False
-	return True
+	return True   
+	
+	#client = MongoClient('mongodb://192.168.122.15:27017/')
+	#tttDB = client['usersDB']
+	#users = tttDB['users']
+
+	#query = {'_id':ObjectId(currentId)}
+	#result = users.find_one(query)
+
+	#if result == None:
+	#	return False
+	#return True
 
 @app.route("/addmedia",methods=['POST'])
 def addMedia():
@@ -915,10 +982,10 @@ def getMedia(mediaId):
 
 @app.route("/questions/add", methods=['POST'])
 def addQuestion():
+	before = time.time()
 	#print("in question method")
 	currentCookie = request.cookies.get('_id')
-	#print(currentCookie)
-
+	print(currentCookie)
 	if isLoggedIn(currentCookie) == False:
 		return json.dumps({'status':'error', 'error':'User is not logged in'}), 401	
 
@@ -935,79 +1002,88 @@ def addQuestion():
 		print(media)
 	except KeyError:
 		media = []
+	
 
-	client = MongoClient('mongodb://192.168.122.8:27017/')
-	questionsDB = client['questionsDB']
-	questionsCollection = questionsDB['questions']
-	answersCollection = questionsDB['answers']
-
-	db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
-	fs = gridfs.GridFS(db)
-	for mediaId in media:
-		doc = fs.get(ObjectId(mediaId))
-		poster = doc.poster
-		if poster != currentCookie:
-			return json.dumps({'status':'error', 'error':'media does not belong to user'}), 401
 	if media != []:
+		db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
+		fs = gridfs.GridFS(db)
+		for mediaId in media:
+			doc = fs.get(ObjectId(mediaId))
+			poster = doc.poster
+			if poster != currentCookie:
+				return json.dumps({'status':'error', 'error':'media does not belong to user'}), 401
+		
+		print("probably not supposed to be here")
+		client = MongoClient('mongodb://192.168.122.8:27017/')
+		questionsDB = client['questionsDB']
+		questionsCollection = questionsDB['questions']
+		answersCollection = questionsDB['answers']
+		
 		client2 = MongoClient('mongodb://192.168.122.15:27017/')
-		questionsDB2 = client2['questions']
+		questionsDB2 = client2['questionsDB']
 		questionsCollection2 = questionsDB2['questions']
 		
 		questionsWithMedia2 = questionsCollection2.find_one({"media":{"$in":media}})
 		if questionsWithMedia2 != None:
+			client2.close()		
+			client.close()
 			return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
-		client2.close()		
 
 		questionsWithMedia = questionsCollection.find_one({"media":{"$in":media}})
 		if questionsWithMedia != None:
+			client2.close()		
+			client.close()
 			return json.dumps({'status':'error', 'error':'question with given media already exists'}), 400
 
 		answersWithMedia = answersCollection.find_one({"media":{"$in":media}})
 		if answersWithMedia != None:
+			client2.close()		
+			client.close()
 			return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
-
 #	client.close()
 #
 #	before = time.time()
-#	credentials = pika.PlainCredentials('cloudUser', 'password')
-#	parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
-#	connection = pika.BlockingConnection(parameters)
-#	channel = connection.channel()
+	credentials = pika.PlainCredentials('cloudUser', 'password')
+	parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
+	connection = pika.BlockingConnection(parameters)
+	channel = connection.channel()
 
-#	channel.queue_declare(queue='hello')
+	channel.queue_declare(queue='hello')
 #
-#	qID = ObjectId()
-#	content = json.dumps({"title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None, '_id':str(qID)})
-#	channel.basic_publish(exchange='', routing_key='hello', body=content)
+	qID = ObjectId()
+	content = json.dumps({"title": title, "body": body, "tags":tagsArray, "userID":currentCookie, 'timestamp':int(time.time()), 'media':media, '_id':str(qID)})
+	channel.basic_publish(exchange='', routing_key='hello', body=content)
 #	print(" [x] Sent 'Hello World!'")
 #	after = time.time()
 #	print(after - before)
-#	connection.close()
-
+	connection.close()
+	print(time.time() - before)
+	return json.dumps({'status':'OK', 'id': str(qID)})
 #	indexQuestion(str(qID), title, body)
 
 #	return json.dumps({'status':'OK', 'id': str(qID)})	
-	qid = ObjectId()
-	string = str(qid)
-	print(string)
-	if string[-1] in ["1", "2", "3", "4", "5", "6", "7", "8"]:
-		print(1)
-		client.close()
-		client = MongoClient('mongodb://192.168.122.15:27017/')
-		questionsDB = client['questionsDB']
-		questionsCollection = questionsDB['questions']
-
-	result = questionsCollection.insert_one({"_id":qid, "title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
-	if result.acknowledged == True:
+#	qid = ObjectId()
+#	string = str(qid)
+#	print(string)
+#	if string[-1] in ["1", "2", "3", "4", "5", "6", "7", "8"]:
+#		print(1)
+#		client.close()
+#		client = MongoClient('mongodb://192.168.122.15:27017/')
+#		questionsDB = client['questionsDB']
+#		questionsCollection = questionsDB['questions']
+#	else:
+#		print(0)
+#	result = questionsCollection.insert_one({"_id":qid, "title": title, "body": body, "tags": tagsArray, "userID":currentCookie, 'score': 0, 'view_count':0, 'answer_count':0, 'timestamp':int(time.time()), 'media': media, 'accepted_answer_id':None})
+#	if result.acknowledged == True:
 	#	after = time.time()
 	#	print("time: ", after - before)
-		indexQuestion(str(result.inserted_id), title, body)
-		client.close()
+#		indexQuestion(str(result.inserted_id), title, body)
+#		client.close()
 		
-		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
-	else:
-		client.close()
-		return json.dumps({'status':'error', 'error':'Failed to add question'}), 400
+#		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
+#	else:
+#		client.close()
+#		return json.dumps({'status':'error', 'error':'Failed to add question'}), 400
 
 def indexQuestion(questionID, title, body):
 	tInit = time.time()
