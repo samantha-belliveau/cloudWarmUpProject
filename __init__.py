@@ -189,9 +189,16 @@ def addUser():
 	password = request_json['password']
 	email = request_json['email']
 	
-	#client = MongoClient('mongodb://192.168.122.15:27017/', 27017)
-	#tttDB = client['usersDB']
-	#users = tttDB['users']
+	client = MongoClient('mongodb://192.168.122.15:27017/', 27017)
+	tttDB = client['usersDB']
+	users = tttDB['users']
+	query = {'email':email}
+	result = users.find_one(query)
+	if result != None:
+		return json.dumps({'status':'error', 'error':'User with email already exists'}), 401
+	result   = users.find_one({'username':username})
+	if result != None:
+		return json.dumps({'status':'error', 'error':'Username already taken'}), 403
 	#games = []
 
 	credentials = pika.PlainCredentials('cloudUser', 'password')
