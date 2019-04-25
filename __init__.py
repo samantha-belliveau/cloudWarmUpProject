@@ -490,10 +490,15 @@ def getQuestion(questionId):
 			for answer in answers:
 				mediaToDelete += answer['media']
 			answersCollection.delete_many(query)
+		
+			db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
+			fs = gridfs.GridFS(db)
+			for itemId in mediaToDelete:
+				fs.delete(ObjectId(itemId))
 
-			url = 'http://130.245.171.38/delete'
+			#url = 'http://130.245.171.38/delete'
 
-			response = requests.post(url, json={"mediaToDelete":mediaToDelete})
+			#response = requests.post(url, json={"mediaToDelete":mediaToDelete})
 
 			return Response(status=200)
 
@@ -951,7 +956,7 @@ def addAnswer(questionId):
 			client.close()
 			return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
 
-	uername = request.cookies.get('username')	
+	username = request.cookies.get('username')	
 	#username = (getUser(currentCookie))['username']
 	score = 0
 	is_accepted = False
