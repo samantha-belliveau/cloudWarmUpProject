@@ -780,22 +780,25 @@ def search():
 		
 			qContainsWord = []
 			start = True
-			for word in searchWords:
-				query = {'word':word}
-				qsWithWord = searchCollection.find_one(query)
-				if qsWithWord == None:
-					print("word not found: ", word)
-					continue
-				qIDs = qsWithWord['ids']
-				if start:
-					qContainsWord = qIDs
-					print(qContainsWord)
-					start = False
-				else:
-					#print("contains ", word)
-					for qID in qIDs:
-						if not (qID in qContainsWord):
-							qContainsWord.append(qID)
+			results = searchCollection.find({"words":{"$in":searchWords}})
+			for item in results:
+				qContainsWord += item['ids']
+			#for word in searchWords:
+			#	query = {'word':word}
+			#	qsWithWord = searchCollection.find_one(query)
+			#	if qsWithWord == None:
+			#		print("word not found: ", word)
+			#		continue
+			#	qIDs = qsWithWord['ids']
+			#	if start:
+			#		qContainsWord = qIDs
+			#		print(qContainsWord)
+			#		start = False
+			#	else:
+			#		#print("contains ", word)
+			#		for qID in qIDs:
+			#			if not (qID in qContainsWord):
+			#				qContainsWord.append(qID)
 						
 					#for qID in qContainsWord:
 					#	if not (qID in qIDs):
