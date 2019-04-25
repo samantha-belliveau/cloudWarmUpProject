@@ -312,6 +312,7 @@ def login():
 		print("user " + str(ID) + " logged in")
 		response = jsonify(status='OK', cookie=str(ID))
 		response.set_cookie('_id', str(ID))
+		response.set_cookie('username', username)
 		return response
 	
 	return json.dumps({'status':'error', 'error':'User not verified, or invalid username/password'}), 401
@@ -946,8 +947,9 @@ def addAnswer(questionId):
 			client2.close()		
 			client.close()
 			return json.dumps({'status':'error', 'error':'answer with given media already exists'}), 400
-	
-	username = (getUser(currentCookie))['username']
+
+	uername = request.cookies.get('username')	
+	#username = (getUser(currentCookie))['username']
 	score = 0
 	is_accepted = False
 	timestamp = int(time.time())
