@@ -413,22 +413,43 @@ def getQuestion(questionId):
 
 		currentCookie = request.cookies.get('_id')
 		newViewCount = question['view_count']
+		identifier = currentCookie
 		if isLoggedIn(currentCookie) == False:	
 			# get IP
-			IP = request.remote_addr
-			query = {'IP':IP, 'questionID':questionId}
-			result = viewersCollection.find_one(query)
-			if result == None:
-				newViewCount = newViewCount + 1
-				questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
-				viewersCollection.insert_one({'IP':IP, 'questionID':questionId})
-		else:
-			query = {'userID':currentCookie, 'questionID':questionId}
-			result = viewersCollection.find_one(query)
-			if result == None:
-				newViewCount = newViewCount + 1
-				questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
-				viewersCollection.insert_one({'userID':currentCookie, 'questionID':questionId})
+			identifier = request.remote_addr
+		
+		viewers = question['viewers']
+		if not identifier in viewers:
+			print('here')
+			#query = {'IP':IP, 'questionID':questionId}
+			#result = viewersCollection.find_one(query)
+			#if result == None:
+			
+			credentials = pika.PlainCredentials('cloudUser', 'password')
+			parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
+			connection = pika.BlockingConnection(parameters)
+			channel = connection.channel()
+
+			channel.queue_declare(queue='hello')
+#
+			newViewCount = newViewCount + 1
+			content = json.dumps({'_id':questionId,'identifier':identifier, 'newViewCount':newViewCount})
+			channel.basic_publish(exchange='', routing_key='hello', body=content)
+#	print(" [x] Sent 'Hello World!'")
+#	after = time.time()
+#	print(after - before)
+			connection.close()
+			
+			#newViewCount = newViewCount + 1
+			#questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
+			#viewersCollection.insert_one({'IP':IP, 'questionID':questionId})
+		#else:
+		#	query = {'userID':currentCookie, 'questionID':questionId}
+		#	result = viewersCollection.find_one(query)
+		#	if result == None:
+		#		newViewCount = newViewCount + 1
+		#		questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'view_count':newViewCount}})
+		#		viewersCollection.insert_one({'userID':currentCookie, 'questionID':questionId})
 	
 		user = getUser(question['userID'])
 
