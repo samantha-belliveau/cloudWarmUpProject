@@ -561,20 +561,25 @@ def upvoteAnswers(answerId):
 	if answer == None:
 		return make_response(json.dumps({'status':'error', 'error':'Invalid answer ID'}), 400)
 
-	username = answer['username']
+	username = answer['user']
 
 	user = getUserByName(username)
 	userID = str(user['_id'])
-
+	rep = user['reputation']
 	if results == None:
 		print("no upvotes for this user/question combo")
-		upvotesCollection.insert_one({"userID":currentCookie, "answerID":answerId, "upvote":upvote})
 		if upvote:
 			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
+			upvotesCollection.insert_one({"userID":currentCookie, "answerID":answerId, "upvote":upvote, "changed":True})
 		else:
-			users.update_one({'_id':ObjectId(userID), 'reputation':{"$ne":1}}, { "$inc": {"reputation": changeValue}})
+			if rep > 1:
+				users.update_one({'_id':ObjectId(userID), 'reputation':{"$ne":1}}, { "$inc": {"reputation": changeValue}})
+				upvotesCollection.insert_one({"userID":currentCookie, "answerID":answerId, "upvote":upvote, "changed":True})
+			else:	
+				upvotesCollection.insert_one({"userID":currentCookie, "answerID":answerId, "upvote":upvote, "changed":False})
 	else:
 		previousVote = results['upvote']
+		changed = results['changed']
 		if previousVote and upvote:
 			print("prevVote = true, vote = true")
 			changeValue = -1
@@ -583,7 +588,8 @@ def upvoteAnswers(answerId):
 		elif not previousVote and not upvote:
 			print("prevVote = false, vote = false")
 			changeValue = 1
-			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
+			if changed:
+				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
 			upvotesCollection.delete_one({"userID":currentCookie, "answerID":answerId})
 		elif previousVote and not upvote:
 			print("prevVote = true, vote = false")
@@ -596,9 +602,13 @@ def upvoteAnswers(answerId):
 		else:
 			print("prevVote = false, vote = true")
 			changeValue = 2
-			upvotesCollection.update_one({"userID":currentCookie, "answerID":answerId},{'$set':{'upvote':upvote}})
-			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
-
+			if changed:
+				upvotesCollection.update_one({"userID":currentCookie, "answerID":answerId},{'$set':{'upvote':upvote}})
+				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
+			else:
+				upvotesCollection.update_one({"userID":currentCookie, "answerID":answerId},{'$set':{'upvote':upvote}})
+				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": 1}})
+				
 	answersCollection.update_one({'_id':ObjectId(answerId)},{ "$inc": {"score": changeValue}})
 
 	return json.dumps({'status':'OK'})
@@ -607,7 +617,9 @@ def upvoteAnswers(answerId):
 def upvoteQuestions(questionId):
 	request_json = request.get_json()
 	upvote = request_json['upvote']
-	
+
+	print("question ID: ", questionId)
+	print("upvote :", upvote)
 	currentCookie = request.cookies.get('_id')
 	if isLoggedIn(currentCookie) == False:
 		return make_response(json.dumps({'status':'error', 'error':'Must be logged in to upvote'}), 401)
@@ -637,30 +649,40 @@ def upvoteQuestions(questionId):
 
 	query = {"_id":ObjectId(userID)}
 	user = users.find_one(query)
+	rep = user['reputation']
 	if results == None:
 		print("no upvotes for this user/question combo")
 	# results == none, there are no upvotes or downvotes, so just add one or subtract one as needed
-		upvotesCollection.insert_one({"userID":currentCookie, "questionID":questionId, "upvote":upvote})
 		if upvote:
-			print("upvote ", userID, "'s reputation by ", changeValue)
+			print("1 upvote ", userID)
 			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
+			upvotesCollection.insert_one({"userID":currentCookie, "questionID":questionId, "upvote":upvote, "changed":True})
 		else:
-			print("downvote ", userID, "'s reputation by ", changeValue)	
-			users.update_one({'_id':ObjectId(userID), 'reputation':{"$ne":1}}, { "$inc": {"reputation": changeValue}})
+			print("-1 upvote ", userID)
+			print(changeValue)
+			if rep > 1:	
+				users.update_one({'_id':ObjectId(userID), 'reputation':{"$ne":1}}, { "$inc": {"reputation": changeValue}})
+				upvotesCollection.insert_one({"userID":currentCookie, "questionID":questionId, "upvote":upvote, "changed":True})
+			else:
+				upvotesCollection.insert_one({"userID":currentCookie, "questionID":questionId, "upvote":upvote, "changed":False})
+				
 	else:
 		previousVote = results['upvote']
+		changed = results['changed']
+		print("upvote: userID ", userID)
 		if previousVote and upvote:
-			print("prevVote = true, vote = true")
+			print("prevVote = true, vote = true, -1")
 			changeValue = -1
 			users.update_one({'_id':ObjectId(userID), 'reputation':{"$ne":1}}, { "$inc": {"reputation": changeValue}})
 			upvotesCollection.delete_one({"userID":currentCookie, "questionID":questionId})
 		elif not previousVote and not upvote:
-			print("prevVote = false, vote = false")
+			print("prevVote = false, vote = false, 1")
 			changeValue = 1
-			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
+			if changed:
+				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
 			upvotesCollection.delete_one({"userID":currentCookie, "questionID":questionId})
 		elif previousVote and not upvote:
-			print("prevVote = true, vote = false")
+			print("prevVote = true, vote = false, -2")
 			changeValue = -2
 			upvotesCollection.update_one({"userID":currentCookie, "questionID":questionId},{'$set':{'upvote':upvote}}) 
 			if user['reputation'] >= 3:
@@ -668,11 +690,14 @@ def upvoteQuestions(questionId):
 			if user['reputation'] == 2:
 				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": -1}})
 		else:
-			print("prevVote = false, vote = true")
+			print("prevVote = false, vote = true, 2")
 			changeValue = 2
-			upvotesCollection.update_one({"userID":currentCookie, "questionID":questionId},{'$set':{'upvote':upvote}}) 
-			users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
-			
+			if changed:
+				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": changeValue}})
+				upvotesCollection.update_one({"userID":currentCookie, "questionID":questionId},{'$set':{'upvote':upvote}}) 
+			else:
+				users.update_one({'_id':ObjectId(userID)}, { "$inc": {"reputation": 1}})
+				upvotesCollection.update_one({"userID":currentCookie, "questionID":questionId},{'$set':{'upvote':upvote}}) 
 	questionsCollection.update_one({'_id':ObjectId(questionId)},{ "$inc": {"score": changeValue}})
 
 	return json.dumps({'status':'OK'}) 
@@ -763,7 +788,7 @@ def search():
 				qIDs = qsWithWord['ids']
 				if start:
 					qContainsWord = qIDs
-					#print(qContainsWord)
+					print(qContainsWord)
 					start = False
 				else:
 					#print("contains ", word)
@@ -784,7 +809,7 @@ def search():
 	client = MongoClient('mongodb://192.168.122.8:27017/')
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
-	#print("matching qs", objectIDArray)
+	print("matching qs", objectIDArray)
 	query = {'timestamp':{'$lte': timestamp}}
 	if len(objectIDArray) > 0:
 		query['_id'] = {'$in':objectIDArray}
@@ -794,7 +819,7 @@ def search():
 		query['media'] = {'$ne':[]}
 	if tags != None:
 		query['tags'] = {'$all':tags}
-	
+	print(query)
 	results = None
 	if sort_by == "timestamp":
 		results = questionsCollection.find(query).sort("timestamp", pymongo.DESCENDING)
@@ -1078,9 +1103,9 @@ def addQuestion():
 #	after = time.time()
 #	print(after - before)
 	connection.close()
+	indexQuestion(str(qID), title, body)
 	print(time.time() - before)
 	return json.dumps({'status':'OK', 'id': str(qID)})
-#	indexQuestion(str(qID), title, body)
 
 #	return json.dumps({'status':'OK', 'id': str(qID)})	
 #	qid = ObjectId()
@@ -1107,22 +1132,44 @@ def addQuestion():
 #		return json.dumps({'status':'error', 'error':'Failed to add question'}), 400
 
 def indexQuestion(questionID, title, body):
-	tInit = time.time()
-	client = MongoClient('mongodb://192.168.122.12:27017/')
-	searchIndexDB = client['questionsIndex']
-	searchIndexCollection = searchIndexDB['questionsIndex']
+	credentials = pika.PlainCredentials('cloudUser', 'password')
+	parameters = pika.ConnectionParameters(host='192.168.122.12',credentials=credentials)
+	connection = pika.BlockingConnection(parameters)
+	channel = connection.channel()
 
+	channel.queue_declare(queue='hello')
+#
 	title = title.lower()
 	body = body.lower()
 	titleWords = title.split(" ")
 	bodyWords = body.split(" ")
-	#print('here')
+	
 	contents = titleWords + bodyWords
+	content = json.dumps({"contents": contents, "questionID": questionID})
+	channel.basic_publish(exchange='', routing_key='hello', body=content)
+#       print(" [x] Sent 'Hello World!'")
+#       after = time.time()
+#       print(after - before)
+	connection.close()
+
+
+
+	#tInit = time.time()
+	#client = MongoClient('mongodb://192.168.122.12:27017/')
+	#searchIndexDB = client['questionsIndex']
+	#searchIndexCollection = searchIndexDB['questionsIndex']
+
+	#title = title.lower()
+	#body = body.lower()
+	#titleWords = title.split(" ")
+	#bodyWords = body.split(" ")
+	#print('here')
+	#contents = titleWords + bodyWords
 	#for word in contents:
 	#	searchIndexCollection.update_one({"word":word}, {'$addToSet': {"ids":questionID}}, upsert=True)
-	searchIndexCollection.update_many({"word": {"$in": contents}}, {'$addToSet': {"ids":questionID}}, upsert=True)
-	client.close()
-	tEnd = time.time()
+	#searchIndexCollection.update_many({"word": {"$in": contents}}, {'$addToSet': {"ids":questionID}}, upsert=True)
+	#client.close()
+	#tEnd = time.time()
 	#print(tEnd - tInit)
 
 @app.route("/cookieTest", methods=['POST'])
