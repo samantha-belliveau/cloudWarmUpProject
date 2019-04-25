@@ -520,6 +520,10 @@ def acceptAnswer(answerId):
 	questionsDB = client['questionsDB']
 	answersCollection = questionsDB['answers']
 	questionsCollection = questionsDB['questions']
+	try:
+		oid = ObjectId(answerId)
+	except:
+		return make_response(json.dumps({'status':'error', 'error':'Invalid answer ID'}), 400)
 
 	query = {'_id':ObjectId(answerId)}
 	answer = answersCollection.find_one(query)
@@ -919,6 +923,11 @@ def addAnswer(questionId):
 	questionsDB = client['questionsDB']
 	questionsCollection = questionsDB['questions']
 	answersCollection = questionsDB['answers']
+
+	try:
+		oid =  ObjectId(questionId)
+	except:
+		return json.dumps({'status':'error', 'error':'Invalid quetion id'}), 400
 
 	query = {'_id': ObjectId(questionId)}
 	question = questionsCollection.find_one(query)
