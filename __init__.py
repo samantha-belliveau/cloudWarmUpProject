@@ -405,7 +405,11 @@ def getQuestion(questionId):
 
 		print("viewing question:")
 		print(questionId)
-
+		try:
+			oID = ObjectId(questionId)
+		except:
+			return json.dumps({'status':'error', 'error':'Invalid question id'}), 400
+			
 		query = {'_id': ObjectId(questionId)}
 		question = questionsCollection.find_one(query)
 
@@ -470,6 +474,10 @@ def getQuestion(questionId):
 			questionsCollection = questionsDB['questions']
 			viewersCollection = questionsDB['questionViewers']
 			answersCollection = questionsDB['answers']
+			try:
+				oId = ObjectId(questionId)
+			except:
+				return json.dumps({'status':'error', 'error':'Invalid question id'}), 400
 
 			query = {'_id': ObjectId(questionId)}
 			question = questionsCollection.find_one(query)
@@ -1043,9 +1051,12 @@ def addMedia():
 def getMedia(mediaId):
 	print('hereeeee')
 	db = MongoClient('mongodb://192.168.122.8:27017/').gridfs_example
-	fs = gridfs.GridFS(db)
-	doc = fs.get(ObjectId(mediaId))
-	return doc.read(), 201, {'Content-Type': doc.fileType}
+	try:
+		fs = gridfs.GridFS(db)
+		doc = fs.get(ObjectId(mediaId))
+		return doc.read(), 201, {'Content-Type': doc.fileType}
+	except:
+		return json.dumps({'status':'error', 'error':'media doesnt exist'}), 401
 	
 	#url = 'http://130.245.171.38/retrieve?mediaID=' + mediaId
 	
