@@ -952,14 +952,33 @@ def addAnswer(questionId):
 	is_accepted = False
 	timestamp = int(time.time())
 
-	result = answersCollection.insert_one({'questionID': str(question['_id']), 'user':username, 'body':body, 'score':score, 'is_accepted':is_accepted, 'timestamp':timestamp, 'media':media})
-	if result.acknowledged == True:
-		answerCount = question['answer_count'] + 1
-		questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'answer_count':answerCount}})
-		print("answer ", str(result.inserted_id), " submitted by user ", username)
-		return json.dumps({'status':'OK', 'id': str(result.inserted_id)})
-	else:
-		return json.dumps({'status':'error', 'error':'Failed to add answer'}), 400
+	aID = ObjectId()
+	answerCount = question['answer_count'] + 1
+
+	credentials = pika.PlainCredentials('cloudUser', 'password')
+	parameters = pika.ConnectionParameters(host='192.168.122.8',credentials=credentials)
+	connection = pika.BlockingConnection(parameters)
+	channel = connection.channel()
+
+	channel.queue_declare(queue='hello')
+#
+	content = json.dumps({'answerCount': answerCount, 'aID':str(aID), 'questionID': str(question['_id']), 'user':username, 'body':body, 'timestamp':timestamp, 'media':media})
+	channel.basic_publish(exchange='', routing_key='hello', body=content)
+#       print(" [x] Sent 'Hello World!'")
+#       after = time.time()
+#       print(after - before)
+	connection.close()
+	return json.dumps({'status':'OK', 'id': str(aID)})
+
+
+	#result = answersCollection.insert_one({'aID':str(aID), 'questionID': str(question['_id']), 'user':username, 'body':body, 'score':score, 'is_accepted':is_accepted, 'timestamp':timestamp, 'media':media})
+	#if result.acknowledged == True:
+	#	answerCount = question['answer_count'] + 1
+	#	questionsCollection.update_one({'_id':ObjectId(questionId)},{'$set':{'answer_count':answerCount}})
+	#	print("answer ", str(aID), " submitted by user ", username)
+	#	return json.dumps({'status':'OK', 'id': str(aID)})
+	#else:
+	#	return json.dumps({'status':'error', 'error':'Failed to add answer'}), 400
 
 def isLoggedIn(currentId):
 	if currentId == "" or currentId == None:
